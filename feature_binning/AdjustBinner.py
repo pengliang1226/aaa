@@ -9,12 +9,11 @@ from math import inf
 from typing import Dict
 
 from pandas import DataFrame, Series
-from sklearn.base import BaseEstimator
 
-from calculate.feature_binning._base import BinnerMixin
+from feature_binning._base import BinnerMixin
 
 
-class AdjustBinner(BaseEstimator, BinnerMixin):
+class AdjustBinner(BinnerMixin):
     def __init__(self, features_info: Dict = None, is_right: bool = True, bins_threshold: Dict = None):
         """
         初始化函数

@@ -5,15 +5,12 @@
 @file: _base.py
 @desc: 
 """
-from typing import Dict, Union, List, Any
+from typing import Dict, List
 
 import numpy as np
-import pandas as pd
-from numpy import ndarray
 from pandas import DataFrame, Series
-from pandas.core.dtypes.common import is_numeric_dtype
 
-from calculate.util.calculate_util import woe_single_all
+from util import woe_single_all
 
 __SMOOTH__ = 1e-6
 __DEFAULT__ = 1e-6
@@ -21,27 +18,119 @@ __DEFAULT__ = 1e-6
 __all__ = ['BinnerMixin', 'encode_woe']
 
 
-# TODO: 只能对数值型变量分箱
 class BinnerMixin:
-    def __init__(self, max_leaf_nodes: int = 5, min_samples_leaf: float = 0.05,
-                 features_info: Dict = None, is_right: bool = True, bad_y: Any = 1):
+    def __init__(self, features_info: Dict = None, features_nan_value: Dict = None, max_leaf_nodes: int = 5,
+                 min_samples_leaf=0.05):
         """
         初始化函数
+        :param features_info: 变量属性类型
+        :param features_nan_value: 变量缺失值标识符字典，每个变量可能对应多个缺失值标识符存储为list
         :param max_leaf_nodes: 最大分箱数量
-        :param min_samples_leaf: 每个分箱最少样本量
-        :param features_info: 变量属性类型；定性、定量
-        :param is_right: 区间是否右闭
-        :param bad_y: 坏样本值
+        :param min_samples_leaf: 每个分箱最少样本比例
         """
         self.max_leaf_nodes = max_leaf_nodes
         self.min_samples_leaf = min_samples_leaf
-        self.features_info = {k: True if v == '1' else 0 for k, v in features_info.items()}
-        self.is_right = is_right
-        self.bad_y = bad_y
+        self.features_info = features_info
+        self.features_nan_value = features_nan_value
 
-        self.features_ = list(features_info.keys())
-        self.min_samples_ = None
-        self.results_ = {}
+        self.features_bins = {}  # 每个变量对应分箱结果
+        self.features_woes = {}  # 每个变量各个分箱woe值
+        self.features_iv = {}  # 每个变量iv值
+
+    def _bin_method(self, x: Series, y: Series, **params):
+        """
+        获取不同方法的分箱结果
+        :param x: 单个变量数据
+        :param y: 标签数据
+        :param params: 参数
+        :return: 分箱区间
+        """
+        raise NotImplementedError("Method or function hasn't been implemented yet.")
+
+    def _bin_threshold(self, x: Series, y: Series, is_num: bool = True, nan_value=None, **params):
+        """
+        获取单个变量分箱阈值
+        :param x: 单个变量数据
+        :param y: 标签数据
+        :param is_num: 是否为定量变量
+        :param nan_value: 缺失值标识符
+        :param params: 分箱参数
+        :return: 变量分箱区间，缺失值是否单独做为一箱标识
+        """
+        # 若缺失值标识符为空，定义为-999，因为前面已经用-999填充
+        if nan_value is None:
+            nan_value = [-999]
+
+        # 判断缺失值数目，如果占比超过min_samples_leaf默认5%, 缺失值单独做为一箱
+        flag = 0  # 标识缺失值是否单独做为一箱
+        miss_value_num = x.isin(nan_value).sum()
+        if miss_value_num > params['min_samples_leaf']:
+            params['max_leaf_nodes'] -= 1
+            y = y[~x.isin(nan_value)]
+            x = x[~x.isin(nan_value)]
+            flag = 1
+
+        if is_num:
+            bucket = self._bin_method(x, y, **params)
+        else:
+            bin_map = encode_woe(x, y)
+            x = x.map(bin_map)
+            bins = self._bin_method(x, y, **params)
+            keys = np.array(list(bin_map.keys()))
+            values = np.array(list(bin_map.values()))
+            bucket = []
+            for i in range(len(bins) - 1):
+                mask = (values > bins[i]) & (values <= bins[i + 1])
+                bucket.append(list(keys[mask]))
+
+        if flag == 1:
+            bucket.insert(0, nan_value)
+
+        return bucket, flag
+
+    def _get_woe_iv(self, x: Series, y: Series, col_name=None):
+        """
+        计算每个分箱指标
+        :param x: 单个变量数据
+        :param y: 标签数据
+        :param col_name: 变量列名
+        :return: woe列表，iv值
+        """
+        is_num = self.features_info[col_name]
+        nan_flag = self.features_bins[col_name]['flag']
+        bins = self.features_bins[col_name]['bins']
+        B = y.sum()
+        G = y.size - B
+        b_bins = []
+        g_bins = []
+
+        if is_num:
+            if nan_flag == 1:
+                for i in range(len(bins) - 1):
+                    if i == 0:
+                        mask = x.isin(bins[0])
+                    else:
+                        mask = (x > bins[i]) & (x <= bins[i + 1]) & (~x.isin(bins[0]))
+                    b_bins.append(y[mask].sum())
+                    g_bins.append(mask.sum() - y[mask].sum())
+            else:
+                for i in range(len(bins) - 1):
+                    mask = (x > bins[i]) & (x <= bins[i + 1])
+                    b_bins.append(y[mask].sum())
+                    g_bins.append(mask.sum() - y[mask].sum())
+        else:
+            for v in bins:
+                mask = x.isin(v)
+                b_bins.append(y[mask].sum())
+                g_bins.append(mask.sum() - y[mask].sum())
+
+        b_bins = np.array(b_bins)
+        g_bins = np.array(g_bins)
+        woes = woe_single_all(B, G, b_bins, g_bins).tolist()
+        temp = (b_bins + __SMOOTH__) / (B + __SMOOTH__) - (g_bins + __SMOOTH__) / (G + __SMOOTH__)
+        iv = float(np.around((temp * woes).sum(), 6))
+
+        return woes, iv
 
     def _get_binning_threshold(self, X: DataFrame, y: Series):
         """
@@ -52,49 +141,6 @@ class BinnerMixin:
         """
         raise NotImplementedError("Method or function hasn't been implemented yet.")
 
-    def _calc_res(self, x: Series, y: Series, bins: List, is_num: bool = True) -> Dict:
-        """
-        计算每个分箱指标
-        :param x: 单个变量数据
-        :param y: 标签数据
-        :param bins: 分箱阈值
-        :param is_num: 是否为定量变量
-        :return:
-        """
-        count_bins = {}
-        bad_bins = {}
-        if is_num:
-            x = pd.cut(x, bins=bins, right=self.is_right, labels=False)
-            uni_v = [i for i in range(len(bins) - 1)]
-            for idx, v in enumerate(uni_v):
-                mask = (x == v)
-                count_bins[v] = mask.sum()
-                bad_bins[v] = y[mask].sum()
-            temp_x = x
-        else:
-            uni_v = bins
-            temp_x = pd.Series(np.zeros_like(x).astype(float))
-            for idx, v in enumerate(uni_v):
-                mask = x.isin(v)
-                k = "[" + ",".join([str(i) for i in v]) + "]"
-                count_bins[k] = mask.sum()
-                bad_bins[k] = y[mask].sum()
-                temp_x[mask] = idx
-
-        woe_bins = woe_part(temp_x, y)
-        iv_bins = iv_part(temp_x, y)
-        res = {"bins": bins_to_str(bins, right=self.is_right, is_num=is_num),
-               "count_bins": [str(i) for i in count_bins.values()],
-               "bad_bins": [str(i) for i in bad_bins.values()],
-               "woe_bins": [format(float(woe_bins[i]), '.6f') if i in woe_bins else str(__DEFAULT__) for i in
-                            range(len(count_bins))],
-               "iv_bins": [format(float(iv_bins[i]), '.6f') if i in iv_bins else str(0) for i in
-                           range(len(count_bins))],
-               "group": [str(i) for i in range(len(count_bins))],
-               "feat_type": '1' if is_num else 0
-               }
-        return res
-
     def fit(self, X: DataFrame, y: Series):
         """
         分箱，获取最终结果
@@ -102,37 +148,35 @@ class BinnerMixin:
         :param y: 标签数据
         :return:
         """
-        # 判断数据是否为数值型
-        assert all(is_numeric_dtype(X[f]) for f in self.features_), 'X should be all of numeric dtypes!'
-        # 将y标签列转换为0,1
-        y = y.apply(lambda x: 1 if x == self.bad_y else 0)
-        # 计算每个分箱最小样本量
-        self.min_samples_ = int(np.ceil(y.size * self.min_samples_leaf))
+        # 判断y是否为0,1变量
+        assert np.array_equal(y, y.astype(bool)), 'y取值非0,1'
+        # 填充空值为-999
+        X.fillna(-999, inplace=True)
         # 获取分箱阈值
-        bins_threshold = self._get_binning_threshold(X, y)
-        # 计算最终结果
-        for col, bins in bins_threshold.items():
-            self.results_[col] = self._calc_res(X[col], y, bins, self.features_info[col])
+        self.features_bins = self._get_binning_threshold(X, y)
+        # 获取分箱woe值和iv值
+        for col in X.columns:
+            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(X[col], y, col)
 
 
-def encode_woe(x: Series, y: Series) -> Dict:
+def encode_woe(X: Series, y: Series) -> Dict:
     """
-    对类别变量进行排序，以便分箱，返回的是变量取值和woe的映射关系
-    :param x: 单个变量数据
-    :param y: 标签数据
-    :return:
+    定性变量woe有序转码，根据woe从小到大排序，替换为0-n数字, 返回转码后对应关系
+    :param X: 变量数据
+    :param y: y标签数据
+    :return: 返回转码后的Dict
     """
     B = y.sum()
     G = y.size - B
-    unique_value = x.unique()
-    mask = (unique_value.reshape(-1, 1) == x.values)
+    unique_value = X.unique()
+    mask = (unique_value.reshape(-1, 1) == X.values)
     mask_bad = mask & (y.values == 1)
     b = mask_bad.sum(axis=1)
     g = mask.sum(axis=1) - b
     woe_value = woe_single_all(B, G, b, g)
-    values_sort = np.argsort(woe_value)
-    bin_map = dict(zip(np.unique(x), values_sort))
-    return bin_map
+    woe_value_sort = np.argsort(woe_value)
+    res = dict(zip(unique_value, woe_value_sort))
+    return res
 
 
 def get_woe_inflexions(woes: List[float]) -> int:
@@ -145,75 +189,3 @@ def get_woe_inflexions(woes: List[float]) -> int:
     if n <= 2:
         return 0
     return sum(1 if (b - a) * (b - a) > 0 else 0 for a, b, c in zip(woes[:-2], woes[1:-1], woes[2:]))
-
-
-def bins_to_str(bins: List, right: bool = True, is_num: bool = True) -> List:
-    """
-    将分箱阈值转换为字符串，以便输出
-    :param bins: 分箱阈值
-    :param right:
-    :param is_num:
-    :return:
-    """
-    res = []
-    if is_num:
-        for i in range(1, len(bins)):
-            if right:
-                temp = "({}, {}]".format(bins[i - 1], bins[i])
-            else:
-                temp = "[{}, {})".format(bins[i - 1], bins[i])
-            res.append(temp)
-    else:
-        for v in bins:
-            temp = "[{}]".format(",".join([str(i) for i in v]))
-            res.append(temp)
-    return res
-
-
-def iv_part(x: Union[Series, ndarray], y: Union[Series, ndarray]) -> Dict:
-    """
-    计算单个变量中每个分箱的iv值
-    :param x: 单个变量数据
-    :param y: 标签数据
-    :return:
-    """
-    if isinstance(x, Series):
-        x = x.values
-    if isinstance(y, Series):
-        y = y.values
-    B = y.sum()
-    G = y.size - B
-    unique_value = np.unique(x)
-    mask = (unique_value.reshape(-1, 1) == x)
-    mask_bad = mask & (y == 1)
-    b = mask_bad.sum(axis=1)
-    g = mask.sum(axis=1) - b
-    temp = (b + __SMOOTH__) / (B + __SMOOTH__) - (g + __SMOOTH__) / (G + __SMOOTH__)
-    iv_value = np.around(temp * woe_single_all(B, G, b, g), 6)
-    iv_value = iv_value.tolist()
-    res = dict(zip(unique_value, iv_value))
-    return res
-
-
-def woe_part(x: Union[Series, ndarray], y: Union[Series, ndarray]) -> Dict:
-    """
-    计算单个变量每个分箱的woe
-    :param x: 单个变量数据
-    :param y: 标签数据
-    :return:
-    """
-    if isinstance(x, Series):
-        x = x.values
-    if isinstance(y, Series):
-        y = y.values
-    B = y.sum()
-    G = y.size - B
-    unique_value = np.unique(x)
-    mask = (unique_value.reshape(-1, 1) == x)
-    mask_bad = mask & (y == 1)
-    b = mask_bad.sum(axis=1)
-    g = mask.sum(axis=1) - b
-    woe_value = np.around(woe_single_all(B, G, b, g), 6)
-    woe_value = woe_value.tolist()
-    res = dict(zip(unique_value, woe_value))
-    return res
