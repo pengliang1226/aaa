@@ -10,7 +10,7 @@ from typing import Dict, List
 import numpy as np
 from pandas import DataFrame, Series
 
-from util import woe_single_all
+from util import woe_single_all, woe_single
 
 __SMOOTH__ = 1e-6
 __DEFAULT__ = 1e-6
@@ -31,6 +31,7 @@ class BinnerMixin:
         self.max_leaf_nodes = max_leaf_nodes
         self.min_samples_leaf = min_samples_leaf
         self.features_info = features_info
+        assert features_nan_value is not None, '变量缺失值标识符字典为空'
         self.features_nan_value = features_nan_value
 
         self.features_bins = {}  # 每个变量对应分箱结果
@@ -57,10 +58,6 @@ class BinnerMixin:
         :param params: 分箱参数
         :return: 变量分箱区间，缺失值是否单独做为一箱标识
         """
-        # 若缺失值标识符为空，定义为-999，因为前面已经用-999填充
-        if nan_value is None:
-            nan_value = [-999]
-
         # 判断缺失值数目，如果占比超过min_samples_leaf默认5%, 缺失值单独做为一箱
         flag = 0  # 标识缺失值是否单独做为一箱
         miss_value_num = x.isin(nan_value).sum()
@@ -72,6 +69,7 @@ class BinnerMixin:
 
         if is_num:
             bucket = self._bin_method(x, y, **params)
+            bucket = [[bucket[i], bucket[i + 1]] for i in range(len(bucket) - 1)]
         else:
             bin_map = encode_woe(x, y)
             x = x.map(bin_map)
@@ -81,14 +79,14 @@ class BinnerMixin:
             bucket = []
             for i in range(len(bins) - 1):
                 mask = (values > bins[i]) & (values <= bins[i + 1])
-                bucket.append(list(keys[mask]))
+                bucket.append(keys[mask].tolist())
 
         if flag == 1:
             bucket.insert(0, nan_value)
 
         return bucket, flag
 
-    def _get_woe_iv(self, x: Series, y: Series, col_name=None):
+    def _get_woe_iv(self, x: Series, y: Series, col_name):
         """
         计算每个分箱指标
         :param x: 单个变量数据
@@ -104,20 +102,19 @@ class BinnerMixin:
         b_bins = []
         g_bins = []
 
+        if nan_flag == 1:
+            mask = x.isin(bins[0])
+            b_bins.append(y[mask].sum())
+            g_bins.append(mask.sum() - y[mask].sum())
+            bins = bins[1:]
+            x = x[~mask]
+            y = y[~mask]
+
         if is_num:
-            if nan_flag == 1:
-                for i in range(len(bins) - 1):
-                    if i == 0:
-                        mask = x.isin(bins[0])
-                    else:
-                        mask = (x > bins[i]) & (x <= bins[i + 1]) & (~x.isin(bins[0]))
-                    b_bins.append(y[mask].sum())
-                    g_bins.append(mask.sum() - y[mask].sum())
-            else:
-                for i in range(len(bins) - 1):
-                    mask = (x > bins[i]) & (x <= bins[i + 1])
-                    b_bins.append(y[mask].sum())
-                    g_bins.append(mask.sum() - y[mask].sum())
+            for left, right in bins:
+                mask = (x > left) & (x <= right)
+                b_bins.append(y[mask].sum())
+                g_bins.append(mask.sum() - y[mask].sum())
         else:
             for v in bins:
                 mask = x.isin(v)
@@ -150,12 +147,76 @@ class BinnerMixin:
         """
         # 判断y是否为0,1变量
         assert np.array_equal(y, y.astype(bool)), 'y取值非0,1'
-        # 填充空值为-999
-        X.fillna(-999, inplace=True)
+        # 判断数据是否存在缺失
+        assert any(X.isna()), '数据存在空值'
         # 获取分箱阈值
-        self.features_bins = self._get_binning_threshold(X, y)
+        self._get_binning_threshold(X.copy(), y.copy())
         # 获取分箱woe值和iv值
         for col in X.columns:
+            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(X[col].copy(), y.copy(), col)
+
+    def binning_trim(self, X: DataFrame, y: Series, col_list: List):
+        """
+        分箱单调性调整，并重新计算相关指标
+        :param X: 数据
+        :param y: y标签数据
+        :param col_list: 需要调整分箱的列
+        :return:
+        """
+        B = y.sum()
+        G = y.size - B
+        for col in col_list:
+            col_data = X[col].copy()
+            y_data = y.copy()
+            feat_type = self.features_info[col]
+            bins = self.features_bins[col]['bins']
+            flag = self.features_bins[col]['flag']
+            woes = np.array(self.features_woes[col])
+
+            # 剔除缺失值相关信息
+            if flag == 1:
+                mask = col_data.isin(bins[0])
+                col_data = col_data[~mask]
+                y_data = y_data[~mask]
+                woes = woes[1:]
+                bins = bins[1:]
+
+            # 判断是否需要调整woe单调性
+            if get_woe_inflexions(woes) == 0:
+                continue
+
+            # 开始调整，分单调递减和单调递增, 合并区间时向前合并
+            while get_woe_inflexions(woes) > 0:
+                # 判断woes开始位置值正负来确定不符合单调性的位置
+                if woes[0] > 0:
+                    idx = np.where(woes[:-1] < woes[1:])[0][0] + 1
+                elif woes[0] < 0:
+                    idx = np.where(woes[:-1] > woes[1:])[0][0] + 1
+                else:
+                    break
+                # 重新计算合并后的woe值
+                if feat_type == 1:
+                    mask = (col_data > bins[idx - 1][0]) & (col_data <= bins[idx][1])
+                    bins[idx - 1][1] = bins[idx][1]
+                else:
+                    mask = (col_data.isin(bins[idx - 1])) | (col_data.isin(bins[idx]))
+                    bins[idx - 1] += bins[idx]
+                b = y_data[mask].sum()
+                g = mask.sum() - b
+                woes[idx - 1] = woe_single(B, G, b, g)
+                woes = np.delete(woes, idx)
+                del bins[idx]
+
+                # 如果区间个数小于等于2，退出
+                if len(woes) <= 2:
+                    break
+
+            # 修改原始分箱信息
+            if flag == 1:
+                self.features_bins[col]['bins'][1:] = bins
+            else:
+                self.features_bins[col]['bins'] = bins
+
             self.features_woes[col], self.features_iv[col] = self._get_woe_iv(X[col], y, col)
 
 
@@ -188,4 +249,4 @@ def get_woe_inflexions(woes: List[float]) -> int:
     n = len(woes)
     if n <= 2:
         return 0
-    return sum(1 if (b - a) * (b - a) > 0 else 0 for a, b, c in zip(woes[:-2], woes[1:-1], woes[2:]))
+    return sum(1 if (b - a) * (b - c) > 0 else 0 for a, b, c in zip(woes[:-2], woes[1:-1], woes[2:]))

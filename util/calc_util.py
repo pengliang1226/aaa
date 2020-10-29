@@ -1,5 +1,5 @@
-import math
 import os
+from math import isinf, inf
 from pickle import load, dump
 from typing import Any, Union, Dict, List
 
@@ -8,6 +8,7 @@ import pandas as pd
 from numpy import ndarray
 from pandas import Series, DataFrame
 from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
 
 from util.config import DISCRETE, CONTINUOUS
 
@@ -60,7 +61,7 @@ def woe_single(B: float, G: float, b: float, g: float) -> float:
     woe计算
     """
     res = np.log(((b + __SMOOTH__) / (B + __SMOOTH__)) / ((g + __SMOOTH__) / (G + __SMOOTH__)))
-    return __DEFAULT__ if math.isinf(res) else res
+    return __DEFAULT__ if isinf(res) else res
 
 
 def woe_single_all(B: float, G: float, b: ndarray, g: ndarray) -> ndarray:
@@ -72,195 +73,54 @@ def woe_single_all(B: float, G: float, b: ndarray, g: ndarray) -> ndarray:
     return res
 
 
-def get_time_span(col_time: Series, range_num: int = 10):
-    """
-    等分时间返回阈值
-    :param col_time:
-    :param range_num:
-    :return:
-    """
-    col = pd.to_datetime(col_time)
-    bins = pd.date_range(start=col.min(), end=col.max(), periods=range_num + 1, normalize=True)
-    return bins
-
-
-def get_time_span_by_month(col_time: Series) -> ndarray:
-    """
-    按月统计时间
-    :param col_time:
-    :return:
-    """
-    col = pd.to_datetime(col_time)
-    bins = np.unique([str(x)[:7] for x in np.sort(col[col.notna()].unique())])
-    return bins
-
-
-def statistics_sample(X: Series, y: Series, bins: Any, bad_y: Any):
-    """
-    按时间统计样本
-    :param X: 时间列
-    :param y: 标签列
-    :param bins: 时间划分阈值
-    :param bad_y: 坏样本值
-    :return:
-    """
-    X = pd.to_datetime(X)
-    X = pd.cut(X, bins=bins, right=True, include_lowest=True, labels=False)
-
-    time_span = []
-    rate_bins = []
-    bad_bins = []
-    for v in range(len(bins) - 1):
-        time_span.append('(' + str(bins[v])[:10] + ',' + str(bins[v + 1])[:10] + ']')
-        if (X == v).sum() == 0:
-            bad_bins.append('0')
-            rate_bins.append('0')
-        else:
-            bad_rate = ((X == v) & (y == bad_y)).sum() / (X == v).sum()
-            rate = (X == v).sum() / len(X)
-            bad_bins.append(str(round(bad_rate, 4)))
-            rate_bins.append(str(round(rate, 4)))
-    if X.isna().any():
-        time_span.append('NULL')
-        bad_rate = ((X.isna()) & (y == bad_y)).sum() / (X.isna()).sum()
-        rate = (X.isna()).sum() / len(X)
-        bad_bins.append(str(round(bad_rate, 4)))
-        rate_bins.append(str(round(rate, 4)))
-
-    res = {
-        'index': [str(i) for i in range(len(time_span))],
-        'time_span': time_span,
-        'bad_rate': bad_bins,
-        'count_rate': rate_bins
-    }
-    return res
-
-
-def statistics_sample_by_month(X: Series, y: Series, bins: Any, bad_y: Any):
-    """
-    按月统计样本
-    :param X: 时间列
-    :param y: 标签列
-    :param bins: 月份列表
-    :param bad_y: 坏样本值
-    :return:
-    """
-    X = pd.to_datetime(X).apply(lambda x: str(x)[:7] if pd.notna(x) else None)
-
-    time_span = []
-    rate_bins = []
-    bad_bins = []
-    for v in bins:
-        time_span.append(v)
-        if (X == v).sum() == 0:
-            bad_bins.append('0')
-            rate_bins.append('0')
-        else:
-            bad_rate = ((X == v) & (y == bad_y)).sum() / (X == v).sum()
-            rate = (X == v).sum() / len(X)
-            bad_bins.append(str(round(bad_rate, 4)))
-            rate_bins.append(str(round(rate, 4)))
-    if X.isna().any():
-        time_span.append('NULL')
-        bad_rate = ((X.isna()) & (y == bad_y)).sum() / (X.isna()).sum()
-        rate = (X.isna()).sum() / len(X)
-        bad_bins.append(str(round(bad_rate, 4)))
-        rate_bins.append(str(round(rate, 4)))
-
-    res = {
-        'index': [str(i) for i in range(len(time_span))],
-        'time_span': time_span,
-        'bad_rate': bad_bins,
-        'count_rate': rate_bins
-    }
-    return res
-
-
-def stat_group(X: Union[Series, ndarray], y: Union[Series, ndarray], tag_values: Any, bad_y: Any = 1):
-    """
-    分层统计
-    :param X: 统计目标列
-    :param y: 标签列
-    :param tag_values: 需要统计的值列表
-    :param bad_y: 坏样本值
-    :return:
-    """
-    if isinstance(X, Series):
-        X = X.values
-    if isinstance(y, Series):
-        y = y.values
-
-    row_count = X.shape[0]
-    res_map = {}
-    for tag_val in tag_values:
-        if (X == tag_val).sum() == 0:
-            val_rate = 0
-            bad_rate = 0
-        else:
-            val_rate = (X == tag_val).sum() / row_count
-            bad_rate = ((X == tag_val) & (y == bad_y)).sum() / (X == tag_val).sum()
-        tag_map = {'count_rate': str(round(val_rate, 4)), 'bad_rate': str(round(bad_rate, 4))}
-        res_map[tag_val] = tag_map
-    return res_map
-
-
-def divide_train_test(data: DataFrame, flag_y: Any, seed: int = None, test_size: float = 0.3):
+def divide_sample(data: DataFrame, seed: int = None, test_size: float = 0.2):
     """
     样本划分
     :param data: 数据
-    :param flag_y: y标签列名
     :param seed: 随机种子
     :param test_size: 切分比例
     :return:
     """
-    x = data.loc[:, data.columns != flag_y]
-    y = data.loc[:, data.columns == flag_y]
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=seed)
-    x_train.insert(0, flag_y, y_train)
-    x_test.insert(0, flag_y, y_test)
-    return x_train, x_test
+    train_data, test_data = train_test_split(data, test_size=test_size, random_state=seed)
+    return train_data, test_data
 
 
-def woe_transform(data: DataFrame, woe_dict: Dict):
+def woe_transform(X: Series, feat_type: int, bins_info: Dict, woes_info: List):
     """
     样本数据转woe
-    :param data: 数据
-    :param woe_dict: woe转码信息
+    :param X: 变量数据
+    :param feat_type: 变量属性类型
+    :param bins_info: 分箱信息
+    :param woes_info: woe信息
     :return:
     """
-    for key, value in woe_dict.items():
-        if value == {}:
-            continue
-        col = data[key]
-        bins = value['bins'].split(';')
-        woe_bins = value['woe_bins'].split(',')
-        for i, b in enumerate(bins):
-            if '[' in b and ']' in b:
-                b = eval(b)
-                col[col.isin(b)] = float(woe_bins[i])
-            elif '(' in b:
-                left = b[1:-1].split(',')[0]
-                right = b[1:-1].split(',')[1]
-                if left == '-inf':
-                    col[col <= float(right)] = float(woe_bins[i])
-                elif right == 'inf':
-                    col[col > float(left)] = float(woe_bins[i])
-                else:
-                    col[(col > float(left)) & (col <= float(right))] = float(woe_bins[i])
-            else:
-                left = b[1:-1].split(',')[0]
-                right = b[1:-1].split(',')[1]
-                if left == '-inf':
-                    col[col < float(right)] = float(woe_bins[i])
-                elif right == 'inf':
-                    col[col >= float(left)] = float(woe_bins[i])
-                else:
-                    col[(col >= float(left)) & (col < float(right))] = float(woe_bins[i])
+    bins_mask = []
+    bins = bins_info['bins']
+    flag = bins_info['flag']
+    if flag == 1:
+        bins_mask.append(X.isin(bins[0]))
+        X.loc[X.isin(bins[0])] = np.nan
+        bins = bins[1:]
+
+    if feat_type == 1:
+        for left, right in bins:
+            mask = (X > left) & (X <= right)
+            bins_mask.append(mask)
+    else:
+        for v in bins:
+            mask = X.isin(v)
+            bins_mask.append(mask)
+
+    for i, mask in enumerate(bins_mask):
+        X.loc[mask] = float(woes_info[i])
+
+    # if X.dtype == 'O':
+    #     X = X.astype('float64')
 
 
-def get_feature_type(X: Series, threshold: int = 10, null_value: List = None) -> Dict:
+def get_attr_by_unique(X: Series, threshold: int = 10, null_value: List = None) -> Dict:
     """
-    获取变量属性类型；定性或定量
+    通过唯一值个数确定变量属性类型；定性或定量
     :param X: 变量数据
     :param threshold: 变量唯一值个数阈值，用来针对int型变量小于阈值则定义为定性变量（离散变量）
     :param null_value: 缺失值标识符, list可能存在多个缺失值
@@ -271,6 +131,19 @@ def get_feature_type(X: Series, threshold: int = 10, null_value: List = None) ->
     data_type = X.convert_dtypes().dtype.name
     unique_num = X[X.notna()].unique().size
     if (data_type == 'Int64' and unique_num >= threshold) or data_type == 'float64':
+        return CONTINUOUS
+    else:
+        return DISCRETE
+
+
+def get_attr_by_dtype(X: Series) -> Dict:
+    """
+    通过列属性确定变量属性类型；定性或定量
+    :param X: 变量数据
+    :return:
+    """
+    data_type = X.convert_dtypes().dtype.name
+    if data_type == 'Int64' or data_type == 'float64':
         return CONTINUOUS
     else:
         return DISCRETE
@@ -318,26 +191,38 @@ def woe_encoding(X: Series, y: Series, null_value: Any = None, bad_y: Any = 1) -
     return X_encode
 
 
-def bins_to_str(bins: List, right: bool = True, is_num: bool = True) -> List:
+def disorder_mapping(col_data: Series, y: Series, bad_y: Any = 1, null_value: List = None) -> Dict:
     """
-    将分箱阈值转换为字符串，以便输出
-    :param bins: 分箱阈值
-    :param right:
-    :param is_num:
+    无序变量转码
+    :param col_data: 变量数据
+    :param y: y标签数据
+    :param bad_y: 坏样本值
+    :param null_value: 缺失值
     :return:
     """
-    res = []
-    if is_num:
-        for i in range(1, len(bins)):
-            if right:
-                temp = "({}, {}]".format(bins[i - 1], bins[i])
-            else:
-                temp = "[{}, {})".format(bins[i - 1], bins[i])
-            res.append(temp)
-    else:
-        for v in bins:
-            temp = "[{}]".format(",".join([str(i) for i in v]))
-            res.append(temp)
+    mask = col_data.isin(null_value)
+    x = col_data[~mask]
+    y = y[~mask]
+    B = (y == bad_y).sum()
+    G = y.size - B
+    unique_value = x.unique()
+    mask = (unique_value.reshape(-1, 1) == x.values)
+    mask_bad = mask & (y.values == bad_y)
+    b = mask_bad.sum(axis=1)
+    g = mask.sum(axis=1) - b
+    woe_value = np.around(woe_single_all(B, G, b, g), 6)
+    woe_value_sort = np.argsort(woe_value)
+    x = x.map(dict(zip(unique_value, woe_value_sort)))
+    tree = DecisionTreeClassifier(max_leaf_nodes=6, min_samples_leaf=max(int(x.size * 0.05), 50))
+    tree.fit(x.values.reshape(-1, 1), y)
+    threshold = [-inf]
+    threshold.extend(np.sort(tree.tree_.threshold[tree.tree_.feature == 0]).tolist())
+    threshold.append(inf)
+    index = pd.cut(woe_value_sort, threshold, right=True, include_lowest=True, labels=False)
+    res = dict(zip(unique_value.tolist(), index.tolist()))
+    for k in null_value:
+        res[k] = k
+
     return res
 
 

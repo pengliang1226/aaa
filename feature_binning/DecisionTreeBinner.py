@@ -9,10 +9,11 @@ from math import inf
 from typing import Dict
 
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.tree import DecisionTreeClassifier
 
-from feature_binning._base import BinnerMixin, encode_woe
+from feature_binning._base import BinnerMixin
 
 
 class DecisionTreeBinner(BinnerMixin):
@@ -39,6 +40,7 @@ class DecisionTreeBinner(BinnerMixin):
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.random_state = random_state
+        self.B_G_rate = None
 
     def _bin_method(self, x: Series, y: Series, **params) -> list:
         """
@@ -48,11 +50,73 @@ class DecisionTreeBinner(BinnerMixin):
         :param params: 决策树参数
         :return: 决策树分箱区间
         """
-        tree = DecisionTreeClassifier(**params)
-        tree.fit(x.values.reshape(-1, 1), y)
+        # 初步分箱
+        if x.unique().size <= params['max_leaf_nodes']:  # 如果变量唯一值个数小于分箱数, 则直接按唯一值作为阈值
+            bins = [-inf]
+            bins.extend(np.sort(x.unique()))
+            bins = np.array(bins)
+        else:
+            tree = DecisionTreeClassifier(**params)
+            tree.fit(x.values.reshape(-1, 1), y)
+            bins = [-inf]
+            bins.extend(np.sort(tree.tree_.threshold[tree.tree_.feature != -2]).tolist())
+            bins.append(inf)
+            bins = np.array(bins)
+
+        # 分箱中只存在好或坏客户的箱体
+        # 首先判断首个区间的方向
+        # 如果b/g大于B/G则区间方向定为b/g减小的方向, 如果区间全是好客户则向后合并, 反之向前;
+        # 如果b/g大于B/G则区间方向定为b/g增大的方向, 如果区间全是好客户则向前合并, 反之向后;
+        x_cut = pd.cut(x, bins, include_lowest=True, labels=False)
+        freq_tab = pd.crosstab(x_cut, y)
+        cutoffs = bins[1:]
+        freq = freq_tab.values
+        value_counts = freq[:, 1] / freq[:, 0]
+        while np.where(freq == 0)[0].size > 0:
+            idx = np.where(freq == 0)[0][0]
+            if idx == 0:
+                tmp = freq[idx] + freq[idx + 1]
+                freq[idx + 1] = tmp
+                # 删除对应的切分点
+                cutoffs = np.delete(cutoffs, idx)
+            elif idx == len(cutoffs) - 1:
+                tmp = freq[idx - 1] + freq[idx]
+                freq[idx - 1] = tmp
+                # 删除对应的切分点
+                cutoffs = np.delete(cutoffs, idx - 1)
+            else:
+                if value_counts[0] >= self.B_G_rate:  # 方向定为b/g减小的方向
+                    if np.where(freq[idx] > 0)[0] == 0:  # 区间全为好样本
+                        tmp = freq[idx] + freq[idx + 1]
+                        freq[idx + 1] = tmp
+                        # 删除对应的切分点
+                        cutoffs = np.delete(cutoffs, idx)
+                    else:
+                        tmp = freq[idx - 1] + freq[idx]
+                        freq[idx - 1] = tmp
+                        # 删除对应的切分点
+                        cutoffs = np.delete(cutoffs, idx - 1)
+                else:
+                    if np.where(freq[idx] > 0)[0] == 0:  # 区间全为好样本
+                        tmp = freq[idx - 1] + freq[idx]
+                        freq[idx - 1] = tmp
+                        # 删除对应的切分点
+                        cutoffs = np.delete(cutoffs, idx - 1)
+                    else:
+                        tmp = freq[idx] + freq[idx + 1]
+                        freq[idx + 1] = tmp
+                        # 删除对应的切分点
+                        cutoffs = np.delete(cutoffs, idx)
+
+            # 删除idx
+            freq = np.delete(freq, idx, 0)
+            # 更新value_counts
+            value_counts = freq[:, 1] / freq[:, 0]
+
         threshold = [-inf]
-        threshold.extend(np.sort(tree.tree_.threshold[tree.tree_.feature != -2]).tolist())
+        threshold.extend(cutoffs[:-1].tolist())
         threshold.append(inf)
+
         return threshold
 
     def _get_binning_threshold(self, X: DataFrame, y: Series) -> Dict:
@@ -70,14 +134,10 @@ class DecisionTreeBinner(BinnerMixin):
             "max_leaf_nodes": self.max_leaf_nodes,
             "random_state": self.random_state
         }
-        bins_threshold = {}
+        self.B_G_rate = y.sum() / y.size
         for col in X.columns:
             feat_type = self.features_info.get(col)
-            nan_value = self.features_nan_value.get(col) if self.features_nan_value is not None else None
+            nan_value = self.features_nan_value.get(col)
+            assert nan_value is not None, '变量{}缺失值标识符为空'.format(col)
             bins, flag = self._bin_threshold(X[col], y, is_num=feat_type, nan_value=nan_value, **params)
-            bins_threshold[col] = {'bins': bins, 'flag': flag}
-
-        return bins_threshold
-
-
-
+            self.features_bins[col] = {'bins': bins, 'flag': flag}
