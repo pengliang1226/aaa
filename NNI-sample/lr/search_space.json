@@ -1,0 +1,1 @@
+{"C":{"_type":"uniform","_value":[0.1,1]},"penalty":{"_type":"choice","_value":["l1","l2"]},"random_state":{"_type":"choice","_value":[111,222,333,444,555]},"max_iter":{"_type":"choice","_value":[200,300,400,500,600]}}

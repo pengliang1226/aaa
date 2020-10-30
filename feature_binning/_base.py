@@ -38,20 +38,20 @@ class BinnerMixin:
         self.features_woes = {}  # 每个变量各个分箱woe值
         self.features_iv = {}  # 每个变量iv值
 
-    def _bin_method(self, x: Series, y: Series, **params):
+    def _bin_method(self, X: Series, y: Series, **params):
         """
         获取不同方法的分箱结果
-        :param x: 单个变量数据
+        :param X: 单个变量数据
         :param y: 标签数据
         :param params: 参数
         :return: 分箱区间
         """
         raise NotImplementedError("Method or function hasn't been implemented yet.")
 
-    def _bin_threshold(self, x: Series, y: Series, is_num: bool = True, nan_value=None, **params):
+    def _bin_threshold(self, X: Series, y: Series, is_num: bool = True, nan_value=None, **params):
         """
         获取单个变量分箱阈值
-        :param x: 单个变量数据
+        :param X: 单个变量数据
         :param y: 标签数据
         :param is_num: 是否为定量变量
         :param nan_value: 缺失值标识符
@@ -60,20 +60,20 @@ class BinnerMixin:
         """
         # 判断缺失值数目，如果占比超过min_samples_leaf默认5%, 缺失值单独做为一箱
         flag = 0  # 标识缺失值是否单独做为一箱
-        miss_value_num = x.isin(nan_value).sum()
+        miss_value_num = X.isin(nan_value).sum()
         if miss_value_num > params['min_samples_leaf']:
             params['max_leaf_nodes'] -= 1
-            y = y[~x.isin(nan_value)]
-            x = x[~x.isin(nan_value)]
+            y = y[~X.isin(nan_value)]
+            X = X[~X.isin(nan_value)]
             flag = 1
 
         if is_num:
-            bucket = self._bin_method(x, y, **params)
+            bucket = self._bin_method(X, y, **params)
             bucket = [[bucket[i], bucket[i + 1]] for i in range(len(bucket) - 1)]
         else:
-            bin_map = encode_woe(x, y)
-            x = x.map(bin_map)
-            bins = self._bin_method(x, y, **params)
+            bin_map = encode_woe(X, y)
+            X = X.map(bin_map)
+            bins = self._bin_method(X, y, **params)
             keys = np.array(list(bin_map.keys()))
             values = np.array(list(bin_map.values()))
             bucket = []
@@ -86,10 +86,10 @@ class BinnerMixin:
 
         return bucket, flag
 
-    def _get_woe_iv(self, x: Series, y: Series, col_name):
+    def _get_woe_iv(self, X: Series, y: Series, col_name):
         """
         计算每个分箱指标
-        :param x: 单个变量数据
+        :param X: 单个变量数据
         :param y: 标签数据
         :param col_name: 变量列名
         :return: woe列表，iv值
@@ -103,21 +103,21 @@ class BinnerMixin:
         g_bins = []
 
         if nan_flag == 1:
-            mask = x.isin(bins[0])
+            mask = X.isin(bins[0])
             b_bins.append(y[mask].sum())
             g_bins.append(mask.sum() - y[mask].sum())
             bins = bins[1:]
-            x = x[~mask]
+            X = X[~mask]
             y = y[~mask]
 
         if is_num:
             for left, right in bins:
-                mask = (x > left) & (x <= right)
+                mask = (X > left) & (X <= right)
                 b_bins.append(y[mask].sum())
                 g_bins.append(mask.sum() - y[mask].sum())
         else:
             for v in bins:
-                mask = x.isin(v)
+                mask = X.isin(v)
                 b_bins.append(y[mask].sum())
                 g_bins.append(mask.sum() - y[mask].sum())
 
@@ -129,36 +129,36 @@ class BinnerMixin:
 
         return woes, iv
 
-    def _get_binning_threshold(self, X: DataFrame, y: Series):
+    def _get_binning_threshold(self, df: DataFrame, y: Series):
         """
         获取分箱阈值，具体函数参见分箱方法的重写函数
-        :param X:
+        :param df:
         :param y:
         :return:
         """
         raise NotImplementedError("Method or function hasn't been implemented yet.")
 
-    def fit(self, X: DataFrame, y: Series):
+    def fit(self, df: DataFrame, y: Series):
         """
         分箱，获取最终结果
-        :param X: 所有变量数据
+        :param df: 所有变量数据
         :param y: 标签数据
         :return:
         """
         # 判断y是否为0,1变量
         assert np.array_equal(y, y.astype(bool)), 'y取值非0,1'
         # 判断数据是否存在缺失
-        assert any(X.isna()), '数据存在空值'
+        assert any(df.isna()), '数据存在空值'
         # 获取分箱阈值
-        self._get_binning_threshold(X.copy(), y.copy())
+        self._get_binning_threshold(df.copy(), y.copy())
         # 获取分箱woe值和iv值
-        for col in X.columns:
-            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(X[col].copy(), y.copy(), col)
+        for col in df.columns:
+            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
 
-    def binning_trim(self, X: DataFrame, y: Series, col_list: List):
+    def binning_trim(self, df: DataFrame, y: Series, col_list: List):
         """
         分箱单调性调整，并重新计算相关指标
-        :param X: 数据
+        :param df: 数据
         :param y: y标签数据
         :param col_list: 需要调整分箱的列
         :return:
@@ -166,7 +166,7 @@ class BinnerMixin:
         B = y.sum()
         G = y.size - B
         for col in col_list:
-            col_data = X[col].copy()
+            col_data = df[col].copy()
             y_data = y.copy()
             feat_type = self.features_info[col]
             bins = self.features_bins[col]['bins']
@@ -217,7 +217,7 @@ class BinnerMixin:
             else:
                 self.features_bins[col]['bins'] = bins
 
-            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(X[col], y, col)
+            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
 
 
 def encode_woe(X: Series, y: Series) -> Dict:

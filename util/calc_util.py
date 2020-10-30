@@ -73,15 +73,15 @@ def woe_single_all(B: float, G: float, b: ndarray, g: ndarray) -> ndarray:
     return res
 
 
-def divide_sample(data: DataFrame, seed: int = None, test_size: float = 0.2):
+def divide_sample(df: DataFrame, seed: int = None, test_size: float = 0.2):
     """
     样本划分
-    :param data: 数据
+    :param df: 数据
     :param seed: 随机种子
     :param test_size: 切分比例
     :return:
     """
-    train_data, test_data = train_test_split(data, test_size=test_size, random_state=seed)
+    train_data, test_data = train_test_split(df, test_size=test_size, random_state=seed)
     return train_data, test_data
 
 
@@ -97,25 +97,30 @@ def woe_transform(X: Series, feat_type: int, bins_info: Dict, woes_info: List):
     bins_mask = []
     bins = bins_info['bins']
     flag = bins_info['flag']
+    X_trans = X.copy()
     if flag == 1:
-        bins_mask.append(X.isin(bins[0]))
-        X.loc[X.isin(bins[0])] = np.nan
+        bins_mask.append(X_trans.isin(bins[0]))
+        X_trans.loc[X_trans.isin(bins[0])] = np.nan
         bins = bins[1:]
 
     if feat_type == 1:
         for left, right in bins:
-            mask = (X > left) & (X <= right)
+            mask = (X_trans > left) & (X_trans <= right)
             bins_mask.append(mask)
     else:
         for v in bins:
-            mask = X.isin(v)
+            mask = X_trans.isin(v)
             bins_mask.append(mask)
 
+    mask_untrans = bins_mask[0]
     for i, mask in enumerate(bins_mask):
-        X.loc[mask] = float(woes_info[i])
+        mask_untrans = (mask_untrans | mask)
+        X_trans.loc[mask] = float(woes_info[i])
+    # 对分箱区间不包含的值，替换为首个区间的woe
+    if not all(mask_untrans):
+        X_trans.loc[~mask_untrans] = float(woes_info[0]) if flag == 0 else float(woes_info[1])
 
-    # if X.dtype == 'O':
-    #     X = X.astype('float64')
+    return X_trans.astype('float64')
 
 
 def get_attr_by_unique(X: Series, threshold: int = 10, null_value: List = None) -> Dict:

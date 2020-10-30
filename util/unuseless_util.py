@@ -13,6 +13,14 @@ from numpy import ndarray
 from pandas import Series
 
 
+# with open('bins.json', 'w') as f:
+#     json.dump(QT.features_bins, f)
+#
+# with open('woe.json', 'w') as f:
+#     json.dump(QT.features_woes, f)
+#
+# with open('iv.json', 'w') as f:
+#     json.dump(QT.features_iv, f)
 def get_time_span(col_time: Series, range_num: int = 10):
     """
     等分时间返回阈值

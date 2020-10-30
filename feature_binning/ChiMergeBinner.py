@@ -35,15 +35,15 @@ class ChiMergeBinner(BinnerMixin):
         # chi params
         self.confidence_level = confidence_level
 
-    def _bin_method(self, x: Series, y: Series, **params) -> List:
+    def _bin_method(self, X: Series, y: Series, **params) -> List:
         """
         获取卡方分箱结果
-        :param x: 单个变量数据
+        :param X: 单个变量数据
         :param y: 标签数据
         :param params: 参数
         :return: 卡方分箱区间
         """
-        freq_tab = pd.crosstab(x, y)
+        freq_tab = pd.crosstab(X, y)
         freq = freq_tab.values
         cutoffs = freq_tab.index.values
 
@@ -146,10 +146,10 @@ class ChiMergeBinner(BinnerMixin):
 
         return threshold
 
-    def _get_binning_threshold(self, X: DataFrame, y: Series) -> Dict:
+    def _get_binning_threshold(self, df: DataFrame, y: Series) -> Dict:
         """
         获取变量分箱阈值
-        :param X: 所有变量数据
+        :param df: 所有变量数据
         :param y: 标签数据
         :return: 变量分箱区间字典
         """
@@ -160,11 +160,11 @@ class ChiMergeBinner(BinnerMixin):
             "min_samples_leaf": max(int(np.ceil(y.size * self.min_samples_leaf)), 50)
         }
 
-        for col in X.columns:
+        for col in df.columns:
             feat_type = self.features_info.get(col)
             nan_value = self.features_nan_value.get(col)
             assert nan_value is not None, '变量{}缺失值标识符为空'.format(col)
-            bins, flag = self._bin_threshold(X[col], y, is_num=feat_type, nan_value=nan_value, **params)
+            bins, flag = self._bin_threshold(df[col], y, is_num=feat_type, nan_value=nan_value, **params)
             self.features_bins[col] = {'bins': bins, 'flag': flag}
 
 

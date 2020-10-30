@@ -6,17 +6,19 @@
 @desc: 过滤法，按照发散性或者相关性对各个特征进行评分，设定阈值或者待选择阈值的个数，选择特征。
 """
 from typing import Dict, List
-import statsmodels.api as sm
+
 import numpy as np
+import statsmodels.api as sm
 from pandas import DataFrame, Series
+from sklearn.linear_model import LogisticRegression
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
-def threshold_filter(X: DataFrame, null_threshold: float = 0.8, mode_threshold: float = 0.9,
+def threshold_filter(df: DataFrame, null_threshold: float = 0.8, mode_threshold: float = 0.9,
                      unique_threshold: float = 0.8, null_flag: Dict = None) -> List:
     """
     根据缺失值比例、同值占比、唯一值占比筛选
-    :param X: 数据
+    :param df: 数据
     :param null_threshold: 缺失值占比阈值
     :param mode_threshold: 同值占比阈值
     :param unique_threshold: 唯一值占比阈值
@@ -24,8 +26,8 @@ def threshold_filter(X: DataFrame, null_threshold: float = 0.8, mode_threshold: 
     :return: 返回保留的变量
     """
     res = []
-    for col in X.columns:
-        col_data = X[col]
+    for col in df.columns:
+        col_data = df[col]
         if null_flag is not None:
             null_value = null_flag.get(col)
             col_data.replace(null_value, [np.nan] * len(null_value), inplace=True)
@@ -152,13 +154,13 @@ def vif_filter(df: DataFrame, col_list: List, threshold=10) -> List:
     return col_list
 
 
-def logit_pvalue_forward_filter(df: DataFrame, y: Series, col_list: List, p_value: float = 0.05) -> List:
+def logit_pvalue_forward_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.05) -> List:
     """
     logit显著性筛选, 前向逐步回归
     :param df: 数据
     :param y: y标签数据
-    :param col_list: 变量列表
-    :param p_value: p值
+    :param col_list: 变量列表, 按iv从大到小排序
+    :param threshold: p值阈值
     :return:
     """
     pvalues_col = []
@@ -167,42 +169,82 @@ def logit_pvalue_forward_filter(df: DataFrame, y: Series, col_list: List, p_valu
         pvalues_col.append(col)
         # 每引入一个特征就做一次显著性检验
         x_const = sm.add_constant(df.loc[:, pvalues_col])
-        sm_lr = sm.Logit(y, x_const)
-        sm_lr = sm_lr.fit()
+        sm_lr = sm.Logit(y, x_const).fit(disp=False)
         pvalue = sm_lr.pvalues[col]
         # 当引入的特征P值>=0.05时，则剔除，原先满足显著性检验的则保留，不再剔除
-        if pvalue >= 0.05:
+        if pvalue >= threshold:
             pvalues_col.remove(col)
 
     return pvalues_col
 
 
-# def logit_pvalue_backward_filter(df: DataFrame, y: Series, col_list: List, p_value: float = 0.05) -> List:
-#     """
-#     logit显著性筛选, 后向逐步回归
-#     :param df: 数据
-#     :param y: y标签数据
-#     :param col_list: 变量列表
-#     :param p_value: p值
-#     :return:
-#     """
-#     x_c = x.copy()
-#     # 所有特征引入模型，做显著性检验
-#     x_const = sm.add_constant(x_c)
-#     sm_lr = sm.Logit(y, x_const).fit()
-#     pvalue_tup = [(i, j) for i, j in zip(sm_lr.pvalues.index, sm_lr.pvalues.values)][1:]
-#     delete_count = len([i for i, j in pvalue_tup if j >= 0.05])
-#     # 当有P值>=0.05的特征时，执行循环
-#     while delete_count > 0:
-#         # 按IV值从小到大的顺序依次逐个剔除
-#         remove_col = [i for i, j in pvalue_tup if j >= 0.05][-1]
-#         del x_c[remove_col]
-#         # 每次剔除特征后都要重新做显著性检验，直到入模的特征P值都小于0.05
-#         x2_const = sm.add_constant(x_c)
-#         sm_lr2 = sm.Logit(y, x2_const).fit()
-#         pvalue_tup2 = [(i, j) for i, j in zip(sm_lr2.pvalues.index, sm_lr2.pvalues.values)][1:]
-#         delete_count = len([i for i, j in pvalue_tup2 if j >= 0.05])
-#
-#     pvalues_col = x_c.columns.tolist()
-#
-#     return pvalues_col
+def logit_pvalue_backward_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.05) -> List:
+    """
+    logit显著性筛选, 后向逐步回归
+    :param df: 数据
+    :param y: y标签数据
+    :param col_list: 变量列表, 按iv从大到小排序
+    :param threshold: p值
+    :return:
+    """
+    x_c = df.loc[:, col_list].copy()
+    # 所有特征引入模型，做显著性检验
+    x_const = sm.add_constant(x_c)
+    sm_lr = sm.Logit(y, x_const).fit()
+    delete_count = np.where(sm_lr.pvalues >= threshold)[0].size
+    # 当有P值>=0.05的特征时，执行循环
+    while delete_count > 0:
+        # 按IV值从小到大的顺序依次逐个剔除
+        remove_col = sm_lr.pvalues.index[np.where(sm_lr.pvalues >= threshold)[0][-1]]
+        del x_c[remove_col]
+        # 每次剔除特征后都要重新做显著性检验，直到入模的特征P值都小于0.05
+        x_const = sm.add_constant(x_c)
+        sm_lr = sm.Logit(y, x_const).fit()
+        delete_count = np.where(sm_lr.pvalues >= threshold)[0].size
+
+    pvalues_col = x_c.columns.tolist()
+
+    return pvalues_col
+
+
+def coef_forward_filter(df: DataFrame, y: Series, col_list: List) -> List:
+    """
+    系数一致筛选, 保证逻辑回归系数全为正, 前向筛选
+    :param df: 数据
+    :param y: y标签数据
+    :param col_list: 变量列表, 按iv从大到小排序
+    :return:
+    """
+    coef_col = []
+    # 按IV值逐个引入模型，输出系数
+    for i, col in enumerate(col_list):
+        coef_col.append(col)
+        X = df.loc[:, coef_col]
+        sk_lr = LogisticRegression(random_state=0).fit(X, y)
+        coef_dict = {k: v for k, v in zip(coef_col, sk_lr.coef_[0])}
+        # 当引入特征的系数为负，则将其剔除
+        if coef_dict[col] < 0:
+            coef_col.remove(col)
+
+    return coef_col
+
+
+def coef_backward_filter(df: DataFrame, y: Series, col_list: List) -> List:
+    """
+    系数一致筛选, 保证逻辑回归系数全为正, 后向筛选
+    :param df: 数据
+    :param y: y标签数据
+    :param col_list: 变量列表, 按iv从大到小排序
+    :return:
+    """
+    # 按IV值逐个引入模型，输出系数
+    while True:
+        X = df.loc[:, col_list]
+        sk_lr = LogisticRegression(random_state=0).fit(X, y)
+        if any(sk_lr.coef_[0] < 0):
+            idx = np.where(sk_lr.coef_[0] < 0)[0][-1]
+            col_list.remove(col_list[idx])
+        else:
+            break
+
+    return col_list

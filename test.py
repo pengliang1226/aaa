@@ -5,17 +5,19 @@
 @file: test.py
 @desc: 
 """
-import json
-
-import numpy as np
 import pandas as pd
-from feature_binning import DecisionTreeBinner, ChiMergeBinner, QuantileBinner
-from feature_select import threshold_filter, PSI_filter, correlation_filter, vif_filter
-from util import get_feature_type, divide_sample, disorder_mapping, woe_transform
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+
+from eval_metrics import ScoreStretch
+from feature_binning import DecisionTreeBinner, QuantileBinner
+from feature_select import threshold_filter, PSI_filter, correlation_filter, vif_filter, logit_pvalue_forward_filter, \
+    coef_forward_filter
+from util import get_attr_by_unique, disorder_mapping, woe_transform
 
 if __name__ == '__main__':
     # 读取数据
-    data = pd.read_csv(r'D:\workbook\jupyter notebook\金融风控\标准评分卡建模流程\data_pos.csv')
+    data = pd.read_csv(r'D:\workbook\jupyter notebook\金融风控\建模代码\data_pos.csv')
 
     ori_data = data.copy()
     ori_data.drop(columns='cus_num', inplace=True)
@@ -39,9 +41,9 @@ if __name__ == '__main__':
     features_type = {}
     for col in first_feats:
         col_data = ori_data[col]
-        features_type[col] = get_feature_type(col_data.copy(), null_value=null_flag[col])
+        features_type[col] = get_attr_by_unique(col_data.copy(), null_value=null_flag[col])
 
-    #----------------------------------------------PSI筛选----------------------------------------------#
+    # ----------------------------------------------PSI筛选----------------------------------------------#
     QT = QuantileBinner(features_info=features_type, features_nan_value=null_flag, max_leaf_nodes=6)
     QT.fit(train_data.loc[:, first_feats].copy(), train_data['y'].copy())
 
@@ -51,7 +53,7 @@ if __name__ == '__main__':
 
     second_feats = list(res.keys())
 
-    #----------------------------------------------iv值筛选--------------------------------------------------#
+    # ----------------------------------------------iv值筛选--------------------------------------------------#
     DT = DecisionTreeBinner(features_info=features_type, features_nan_value=null_flag, max_leaf_nodes=6)
     DT.fit(train_data.loc[:, second_feats].copy(), train_data['y'].copy())
 
@@ -66,8 +68,8 @@ if __name__ == '__main__':
         if v <= 0.02:
             special.append(k)
 
-    third_feats = [v[0] for v in sorted(DT.features_iv.items(), key=lambda x: x[1], reverse=True)]
-    third_feats = [v for v in third_feats if v not in special]
+    third_feats = [v[0] for v in sorted(DT.features_iv.items(), key=lambda x: x[1], reverse=True) if
+                   v[0] not in special]
 
     # ----------------------------------------------相关系数筛选----------------------------------------------#
     forth_data = train_data.copy()
@@ -85,18 +87,40 @@ if __name__ == '__main__':
     DT.binning_trim(train_data.loc[:, fifth_feats].copy(), train_data['y'].copy(), fifth_feats)
     six_feats = [k for k in fifth_feats if DT.features_iv[k] > 0.02]
 
-    #-----------------------------------------------woe转码---------------------------------------------------#
+    # -----------------------------------------------woe转码---------------------------------------------------#
     train_data = train_data.loc[:, ['y', 'user_date'] + six_feats]
     test_data = test_data.loc[:, ['y', 'user_date'] + six_feats]
     for col in six_feats:
-        woe_transform(train_data[col], features_type[col], DT.features_bins[col], DT.features_woes[col])
-        woe_transform(test_data[col], features_type[col], DT.features_bins[col], DT.features_woes[col])
+        train_data[col] = woe_transform(train_data[col], features_type[col], DT.features_bins[col],
+                                        DT.features_woes[col])
+        test_data[col] = woe_transform(test_data[col], features_type[col], DT.features_bins[col], DT.features_woes[col])
 
-    # with open('bins.json', 'w') as f:
-    #     json.dump(QT.features_bins, f)
-    #
-    # with open('woe.json', 'w') as f:
-    #     json.dump(QT.features_woes, f)
-    #
-    # with open('iv.json', 'w') as f:
-    #     json.dump(QT.features_iv, f)
+    # ---------------------------------------------------剔除系数为负数的特征-----------------------------------------#
+    seven_feats = coef_forward_filter(train_data, train_data['y'], six_feats)
+
+    # ------------------------------------------------显著性筛选------------------------------------------------------#
+    eight_feats = logit_pvalue_forward_filter(train_data, train_data['y'], seven_feats)
+
+    # -----------------------------------------训练模型------------------------------------------#
+    train_x, val_x, train_y, val_y = train_test_split(train_data[eight_feats], train_data['y'], test_size=0.2,
+                                                      random_state=123)
+    test_x, test_y = test_data[eight_feats], test_data['y']
+    params = {
+        # 默认参数
+        "solver": 'liblinear',
+        "multi_class": 'ovr',
+        # 更新参数
+        "max_iter": 100,
+        "penalty": "l2",
+        "C": 1.0,
+        "random_state": 0
+    }
+    lr_model = LogisticRegression(**params).fit(train_x, train_y)
+
+    sc = ScoreStretch()
+    train_pred = sc.predict(train_x, lr_model)
+    train_score = sc.predict_transform(train_x, lr_model)
+    val_pred = sc.predict(val_x, lr_model)
+    val_score = sc.predict_transform(val_x, lr_model)
+    test_pred = sc.predict(test_x, lr_model)
+    test_score = sc.predict_transform(test_x, lr_model)

@@ -1,0 +1,83 @@
+{
+  "colsample_bytree": {
+    "_type": "uniform",
+    "_value": [
+      0.5,
+      1
+    ]
+  },
+  "reg_lambda": {
+    "_type": "uniform",
+    "_value": [
+      0,
+      10
+    ]
+  },
+  "max_depth": {
+    "_type": "choice",
+    "_value": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ]
+  },
+  "n_estimators": {
+    "_type": "choice",
+    "_value": [
+      100,
+      200,
+      300,
+      400,
+      500,
+      600
+    ]
+  },
+  "random_state": {
+    "_type": "choice",
+    "_value": [
+      111,
+      222,
+      333,
+      444,
+      555
+    ]
+  },
+  "reg_alpha": {
+    "_type": "uniform",
+    "_value": [
+      0,
+      10
+    ]
+  },
+  "subsample": {
+    "_type": "uniform",
+    "_value": [
+      0.5,
+      1
+    ]
+  },
+  "learning_rate": {
+    "_type": "uniform",
+    "_value": [
+      0.01,
+      0.3
+    ]
+  },
+  "gamma": {
+    "_type": "uniform",
+    "_value": [
+      0,
+      2
+    ]
+  },
+  "min_child_weight": {
+    "_type": "uniform",
+    "_value": [
+      0,
+      2
+    ]
+  }
+}

@@ -42,22 +42,22 @@ class DecisionTreeBinner(BinnerMixin):
         self.random_state = random_state
         self.B_G_rate = None
 
-    def _bin_method(self, x: Series, y: Series, **params) -> list:
+    def _bin_method(self, X: Series, y: Series, **params) -> list:
         """
         获取决策树分箱结果
-        :param x: 单个变量数据
+        :param X: 单个变量数据
         :param y: 标签数据
         :param params: 决策树参数
         :return: 决策树分箱区间
         """
         # 初步分箱
-        if x.unique().size <= params['max_leaf_nodes']:  # 如果变量唯一值个数小于分箱数, 则直接按唯一值作为阈值
+        if X.unique().size <= params['max_leaf_nodes']:  # 如果变量唯一值个数小于分箱数, 则直接按唯一值作为阈值
             bins = [-inf]
-            bins.extend(np.sort(x.unique()))
+            bins.extend(np.sort(X.unique()))
             bins = np.array(bins)
         else:
             tree = DecisionTreeClassifier(**params)
-            tree.fit(x.values.reshape(-1, 1), y)
+            tree.fit(X.values.reshape(-1, 1), y)
             bins = [-inf]
             bins.extend(np.sort(tree.tree_.threshold[tree.tree_.feature != -2]).tolist())
             bins.append(inf)
@@ -67,7 +67,7 @@ class DecisionTreeBinner(BinnerMixin):
         # 首先判断首个区间的方向
         # 如果b/g大于B/G则区间方向定为b/g减小的方向, 如果区间全是好客户则向后合并, 反之向前;
         # 如果b/g大于B/G则区间方向定为b/g增大的方向, 如果区间全是好客户则向前合并, 反之向后;
-        x_cut = pd.cut(x, bins, include_lowest=True, labels=False)
+        x_cut = pd.cut(X, bins, include_lowest=True, labels=False)
         freq_tab = pd.crosstab(x_cut, y)
         cutoffs = bins[1:]
         freq = freq_tab.values
@@ -119,10 +119,10 @@ class DecisionTreeBinner(BinnerMixin):
 
         return threshold
 
-    def _get_binning_threshold(self, X: DataFrame, y: Series) -> Dict:
+    def _get_binning_threshold(self, df: DataFrame, y: Series) -> Dict:
         """
         获取分箱阈值
-        :param X: 所有变量数据
+        :param df: 所有变量数据
         :param y: 标签数据
         :return: 变量分箱区间字典
         """
@@ -135,9 +135,9 @@ class DecisionTreeBinner(BinnerMixin):
             "random_state": self.random_state
         }
         self.B_G_rate = y.sum() / y.size
-        for col in X.columns:
+        for col in df.columns:
             feat_type = self.features_info.get(col)
             nan_value = self.features_nan_value.get(col)
             assert nan_value is not None, '变量{}缺失值标识符为空'.format(col)
-            bins, flag = self._bin_threshold(X[col], y, is_num=feat_type, nan_value=nan_value, **params)
+            bins, flag = self._bin_threshold(df[col], y, is_num=feat_type, nan_value=nan_value, **params)
             self.features_bins[col] = {'bins': bins, 'flag': flag}
