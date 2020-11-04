@@ -27,6 +27,7 @@ __all__ = [
     'calc_roc',
     'calc_recall',
     'calc_precision',
+    'calc_auc',
     # 多分类
     # 回归
 ]

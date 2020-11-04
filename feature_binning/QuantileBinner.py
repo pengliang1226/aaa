@@ -16,17 +16,19 @@ from feature_binning._base import BinnerMixin
 
 class QuantileBinner(BinnerMixin):
     def __init__(self, features_info: Dict = None, features_nan_value: Dict = None, max_leaf_nodes=5,
-                 min_samples_leaf=0.05):
+                 min_samples_leaf=0.05, is_psi: int = 0):
         """
         初始化函数
         :param features_info: 变量属性类型
         :param features_nan_value: 变量缺失值标识符字典，每个变量可能对应多个缺失值标识符存储为list
         :param max_leaf_nodes: 分箱数量
         :param min_samples_leaf: 每个分箱最少样本比例
+        :param is_psi: 是否是为了计算psi进行的分箱，如果是则不需要进行分箱后的合并操作
         """
         # basic params
         BinnerMixin.__init__(self, features_info=features_info, features_nan_value=features_nan_value,
                              max_leaf_nodes=max_leaf_nodes, min_samples_leaf=min_samples_leaf)
+        self.is_psi = is_psi
 
     def _bin_method(self, X: Series, y: Series, **params) -> list:
         """
@@ -38,47 +40,48 @@ class QuantileBinner(BinnerMixin):
         """
         # 初步分箱
         if X.unique().size <= params['max_leaf_nodes']:  # 如果变量唯一值个数小于分箱数, 则直接按唯一值作为阈值
-            bins = [-inf]
-            bins.extend(np.sort(X.unique()))
-            bins = np.array(bins)
+            cutoffs = [-inf]
+            cutoffs.extend(np.sort(X.unique()))
+            cutoffs = np.array(cutoffs)
         else:
-            _, bins = pd.qcut(X, params['max_leaf_nodes'], duplicates='drop', retbins=True)
+            _, cutoffs = pd.qcut(X, params['max_leaf_nodes'], duplicates='drop', retbins=True)
 
-        # 分箱中只存在好或坏客户的箱体, 与相邻区间样本数目少的合并
-        x_cut = pd.cut(X, bins, include_lowest=True, labels=False)
-        freq_tab = pd.crosstab(x_cut, y)
-        cutoffs = bins[1:]
-        freq = freq_tab.values
-        value_counts = np.sum(freq, axis=1)
-        while np.where(freq == 0)[0].size > 0:
-            idx = np.where(freq == 0)[0][0]
-            left = value_counts[idx - 1] if idx > 0 else inf
-            right = value_counts[idx + 1] if idx < len(cutoffs) - 1 else inf
-            if left > right:
-                tmp = freq[idx] + freq[idx + 1]
-                freq[idx + 1] = tmp
-                # 删除对应的切分点
-                cutoffs = np.delete(cutoffs, idx)
-            else:
-                tmp = freq[idx - 1] + freq[idx]
-                freq[idx - 1] = tmp
-                # 删除对应的切分点
-                cutoffs = np.delete(cutoffs, idx - 1)
-            # 删除idx
-            freq = np.delete(freq, idx, 0)
-            # 更新count值
+        if self.is_psi == 0:
+            # 分箱中只存在好或坏客户的箱体, 与相邻区间样本数目少的合并
+            x_cut = pd.cut(X, cutoffs, include_lowest=True, labels=False)
+            cutoffs = cutoffs[1:]
+            freq_tab = pd.crosstab(x_cut, y)
+            freq = freq_tab.values
             value_counts = np.sum(freq, axis=1)
+            while np.where(freq == 0)[0].size > 0:
+                idx = np.where(freq == 0)[0][0]
+                left = value_counts[idx - 1] if idx > 0 else inf
+                right = value_counts[idx + 1] if idx < len(cutoffs) - 1 else inf
+                if left > right:
+                    tmp = freq[idx] + freq[idx + 1]
+                    freq[idx + 1] = tmp
+                    # 删除对应的切分点
+                    cutoffs = np.delete(cutoffs, idx)
+                else:
+                    tmp = freq[idx - 1] + freq[idx]
+                    freq[idx - 1] = tmp
+                    # 删除对应的切分点
+                    cutoffs = np.delete(cutoffs, idx - 1)
+                # 删除idx
+                freq = np.delete(freq, idx, 0)
+                # 更新count值
+                value_counts = np.sum(freq, axis=1)
+
+            # # 分箱中客户数量小于阈值的箱体, 向前合并
+            # x_cut = pd.cut(x, threshold, include_lowest=True, labels=False)
+            # print(x_cut.value_counts(sort=False))
+            # index = np.where(x_cut.value_counts(sort=False) < params['min_samples_leaf'])[0]
+            # if index.size > 0:
+            #     threshold = [threshold[i] for i in range(len(threshold)) if i not in index]
 
         threshold = [-inf]
         threshold.extend(cutoffs[:-1].tolist())
         threshold.append(inf)
-
-        # # 分箱中客户数量小于阈值的箱体, 向前合并
-        # x_cut = pd.cut(x, threshold, include_lowest=True, labels=False)
-        # print(x_cut.value_counts(sort=False))
-        # index = np.where(x_cut.value_counts(sort=False) < params['min_samples_leaf'])[0]
-        # if index.size > 0:
-        #     threshold = [threshold[i] for i in range(len(threshold)) if i not in index]
 
         return threshold
 

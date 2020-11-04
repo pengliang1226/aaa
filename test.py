@@ -5,13 +5,14 @@
 @file: test.py
 @desc: 
 """
+import re
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
-from eval_metrics import ScoreStretch
+from eval_metrics import ScoreStretch, calc_ks, calc_auc
 from feature_binning import DecisionTreeBinner, QuantileBinner
-from feature_select import threshold_filter, PSI_filter, correlation_filter, vif_filter, logit_pvalue_forward_filter, \
+from feature_select import nan_filter, unique_filter, mode_filter, PSI_filter, correlation_filter, vif_filter, logit_pvalue_forward_filter, \
     coef_forward_filter
 from util import get_attr_by_unique, disorder_mapping, woe_transform
 
@@ -21,6 +22,8 @@ if __name__ == '__main__':
 
     ori_data = data.copy()
     ori_data.drop(columns='cus_num', inplace=True)
+    drop_col = [v for v in ori_data.columns if re.match('flag_|score', v)]
+    ori_data.drop(columns=drop_col, inplace=True)
     y = ori_data.pop('y')
     user_date = ori_data.pop('user_date')
     ori_data.insert(0, 'y', y)
@@ -35,17 +38,19 @@ if __name__ == '__main__':
     test_data = ori_data[ori_data['user_date'].str.contains('2018-08')].copy()
 
     # 根据缺失率，同值占比，唯一值占比进行筛选
-    first_feats = threshold_filter(ori_data.iloc[:, 2:], null_flag=null_flag)
+    tmp = nan_filter(ori_data.iloc[:, 2:], null_flag=null_flag)
+    tmp = mode_filter(ori_data.loc[:, tmp], null_flag=null_flag)
+    first_feats = unique_filter(ori_data.loc[:, tmp], null_flag=null_flag)
 
     # 获取变量属性类型
     features_type = {}
     for col in first_feats:
         col_data = ori_data[col]
-        features_type[col] = get_attr_by_unique(col_data.copy(), null_value=null_flag[col])
+        features_type[col] = get_attr_by_unique(col_data, null_value=null_flag[col])
 
     # ----------------------------------------------PSI筛选----------------------------------------------#
     QT = QuantileBinner(features_info=features_type, features_nan_value=null_flag, max_leaf_nodes=6)
-    QT.fit(train_data.loc[:, first_feats].copy(), train_data['y'].copy())
+    QT.fit(train_data.loc[:, first_feats], train_data['y'])
 
     res = PSI_filter(train_data[train_data['user_date'] < '2018-04-30'],
                      train_data[train_data['user_date'] >= '2018-04-30'], bins_info=QT.features_bins,
@@ -55,7 +60,7 @@ if __name__ == '__main__':
 
     # ----------------------------------------------iv值筛选--------------------------------------------------#
     DT = DecisionTreeBinner(features_info=features_type, features_nan_value=null_flag, max_leaf_nodes=6)
-    DT.fit(train_data.loc[:, second_feats].copy(), train_data['y'].copy())
+    DT.fit(train_data.loc[:, second_feats], train_data['y'])
 
     special = []
     # 剔除分箱区间数为1的变量
@@ -84,7 +89,7 @@ if __name__ == '__main__':
     fifth_feats = vif_filter(forth_data, forth_feats, threshold=10)
 
     # ----------------------------------------------调整分箱并重新筛选iv----------------------------------------------#
-    DT.binning_trim(train_data.loc[:, fifth_feats].copy(), train_data['y'].copy(), fifth_feats)
+    DT.binning_trim(train_data.loc[:, fifth_feats], train_data['y'], fifth_feats)
     six_feats = [k for k in fifth_feats if DT.features_iv[k] > 0.02]
 
     # -----------------------------------------------woe转码---------------------------------------------------#
@@ -117,10 +122,18 @@ if __name__ == '__main__':
     }
     lr_model = LogisticRegression(**params).fit(train_x, train_y)
 
-    sc = ScoreStretch()
+    sc = ScoreStretch(S=ori_data['y'].sum() / ori_data.shape[0])
     train_pred = sc.predict(train_x, lr_model)
     train_score = sc.predict_transform(train_x, lr_model)
     val_pred = sc.predict(val_x, lr_model)
     val_score = sc.predict_transform(val_x, lr_model)
     test_pred = sc.predict(test_x, lr_model)
     test_score = sc.predict_transform(test_x, lr_model)
+
+    val_ks = calc_ks(val_y, val_pred)
+    test_ks = calc_ks(test_y, test_pred)
+
+    val_auc = calc_auc(val_y, val_pred)
+    test_auc = calc_auc(test_y, test_pred)
+    print('验证集auc={}, ks={}'.format(val_auc, val_ks))
+    print('测试集auc={}, ks={}'.format(test_auc, test_ks))

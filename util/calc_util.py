@@ -1,3 +1,10 @@
+# encoding: utf-8
+"""
+@author: pengliang.zhao
+@time: 2020/10/21 19:34
+@file: test.py
+@desc:
+"""
 import os
 from math import isinf, inf
 from pickle import load, dump
@@ -131,10 +138,11 @@ def get_attr_by_unique(X: Series, threshold: int = 10, null_value: List = None) 
     :param null_value: 缺失值标识符, list可能存在多个缺失值
     :return:
     """
+    tmp = X.copy()
     if null_value is not None:
-        X.replace(null_value, [np.nan] * len(null_value), inplace=True)
-    data_type = X.convert_dtypes().dtype.name
-    unique_num = X[X.notna()].unique().size
+        tmp.replace(null_value, [np.nan] * len(null_value), inplace=True)
+    data_type = tmp.convert_dtypes().dtype.name
+    unique_num = tmp[tmp.notna()].unique().size
     if (data_type == 'Int64' and unique_num >= threshold) or data_type == 'float64':
         return CONTINUOUS
     else:
@@ -154,35 +162,37 @@ def get_attr_by_dtype(X: Series) -> Dict:
         return DISCRETE
 
 
-def one_hot_encoding(X: Series, feature_name: Any, null_value: Any = None) -> DataFrame:
+def one_hot_encoding(X: Series, null_value: List = None, flag: int = 0) -> Dict:
     """
     定性变量one-hot转码
     :param X: 变量数据
-    :param feature_name: 变量名称，用来对转码后的变量命名
     :param null_value: 缺失值标识符
+    :param flag: 是否考虑缺失值
     :return: 返回转码后的DataFrame
     """
-    unique = X[X.notna()].unique()
-    if null_value is not None:
-        unique = np.delete(unique, np.where(unique == null_value))
-    data_numpy = np.where(unique == X[:, None], 1, 0)
-    data_cols = [feature_name + '_' + str(x) for x in unique]
-    data = pd.DataFrame(data_numpy, columns=data_cols)
-    return data
+    if flag == 1:
+        unique = X[~(X.isna() | X.isin(null_value))].unique()
+    else:
+        unique = X[X.notna()].unique()
+
+    unique = np.sort(unique)
+    res = {k: [1 if i == j else 0 for j in range(len(unique))] for i, k in enumerate(unique)}
+    return res
 
 
-def woe_encoding(X: Series, y: Series, null_value: Any = None, bad_y: Any = 1) -> Series:
+def disorder_mapping(X: Series, y: Series, bad_y: Any = 1, null_value: List = None, flag: int = 0) -> Dict:
     """
-    定性变量woe有序转码，根据woe从小到大排序，替换为0-n数字
+    无序变量转码
     :param X: 变量数据
     :param y: y标签数据
-    :param null_value: 缺失值标识符
     :param bad_y: 坏样本值
-    :return: 返回转码后的Series
+    :param null_value: 缺失值
+    :param flag: 是否考虑缺失值
+    :return:
     """
-    if null_value is not None:
-        X.fillna(null_value, inplace=True)
-
+    mask = X.isin(null_value)
+    X = X[~mask]
+    y = y[~mask]
     B = (y == bad_y).sum()
     G = y.size - B
     unique_value = X.unique()
@@ -192,41 +202,14 @@ def woe_encoding(X: Series, y: Series, null_value: Any = None, bad_y: Any = 1) -
     g = mask.sum(axis=1) - b
     woe_value = np.around(woe_single_all(B, G, b, g), 6)
     woe_value_sort = np.argsort(woe_value)
-    X_encode = X.map(dict(zip(unique_value, woe_value_sort)))
-    return X_encode
-
-
-def disorder_mapping(col_data: Series, y: Series, bad_y: Any = 1, null_value: List = None) -> Dict:
-    """
-    无序变量转码
-    :param col_data: 变量数据
-    :param y: y标签数据
-    :param bad_y: 坏样本值
-    :param null_value: 缺失值
-    :return:
-    """
-    mask = col_data.isin(null_value)
-    x = col_data[~mask]
-    y = y[~mask]
-    B = (y == bad_y).sum()
-    G = y.size - B
-    unique_value = x.unique()
-    mask = (unique_value.reshape(-1, 1) == x.values)
-    mask_bad = mask & (y.values == bad_y)
-    b = mask_bad.sum(axis=1)
-    g = mask.sum(axis=1) - b
-    woe_value = np.around(woe_single_all(B, G, b, g), 6)
-    woe_value_sort = np.argsort(woe_value)
-    x = x.map(dict(zip(unique_value, woe_value_sort)))
-    tree = DecisionTreeClassifier(max_leaf_nodes=6, min_samples_leaf=max(int(x.size * 0.05), 50))
-    tree.fit(x.values.reshape(-1, 1), y)
+    X = X.map(dict(zip(unique_value, woe_value_sort)))
+    tree = DecisionTreeClassifier(max_leaf_nodes=6, min_samples_leaf=max(int(X.size * 0.05), 50))
+    tree.fit(X.values.reshape(-1, 1), y)
     threshold = [-inf]
     threshold.extend(np.sort(tree.tree_.threshold[tree.tree_.feature == 0]).tolist())
     threshold.append(inf)
     index = pd.cut(woe_value_sort, threshold, right=True, include_lowest=True, labels=False)
     res = dict(zip(unique_value.tolist(), index.tolist()))
-    for k in null_value:
-        res[k] = k
 
     return res
 

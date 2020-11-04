@@ -18,8 +18,8 @@ class ScoreStretch:
         :param theta: 计算A，B时，需做两个假设，其一odds某个特定违约比率theta下的分数P0; P0 = A - B * log(theta)
         :param P0: 计算A，B时，需做两个假设，其一odds某个特定违约比率theta下的分数P0
         :param PDO: 计算A，B时，需做两个假设，其二该违约比率翻倍时分数的减少值; P0 - PDO = A - B * log(2*theta)
-        :param score_max: 基础分
-        :param score_min: 翻倍分
+        :param score_max: 分数区间最大值
+        :param score_min: 分数区间最小值
         :param A: 分数计算公式的常数；score = A - B * log(odds)
         :param B: 分数计算公式的系数
         :param S: 样本坏客率，可根据样本计算

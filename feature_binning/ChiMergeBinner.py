@@ -19,7 +19,7 @@ from feature_binning._base import BinnerMixin
 
 class ChiMergeBinner(BinnerMixin):
     def __init__(self, features_info: Dict = None, features_nan_value: Dict = None, max_leaf_nodes=5,
-                 min_samples_leaf=0.05, confidence_level=0.95):
+                 min_samples_leaf=0.05, confidence_level=0.95, is_psi: int = 0):
         """
         初始化函数
         :param features_info: 变量属性类型
@@ -27,6 +27,7 @@ class ChiMergeBinner(BinnerMixin):
         :param max_leaf_nodes: 最大分箱数量
         :param min_samples_leaf: 每个分箱最少样本比例
         :param confidence_level: 置信度
+        :param is_psi: 是否是为了计算psi进行的分箱，如果是则不需要进行分箱后的合并操作
         """
         # basic params
         BinnerMixin.__init__(self, features_info=features_info, features_nan_value=features_nan_value,
@@ -34,6 +35,7 @@ class ChiMergeBinner(BinnerMixin):
 
         # chi params
         self.confidence_level = confidence_level
+        self.is_psi = is_psi
 
     def _bin_method(self, X: Series, y: Series, **params) -> List:
         """
@@ -77,33 +79,11 @@ class ChiMergeBinner(BinnerMixin):
             else:
                 break
 
-        # 分箱中只存在好或坏客户的箱体, 合并相邻卡方值小的区间
-        while np.where(freq == 0)[0].size > 0:
-            idx = np.where(freq == 0)[0][0]
-            if idx == 0:
-                tmp = freq[idx] + freq[idx + 1]
-                freq[idx + 1] = tmp
-                # 删除idx
-                freq = np.delete(freq, idx, 0)
-                # 删除对应的切分点
-                cutoffs = np.delete(cutoffs, idx)
-                # 删除对应chi值
-                chi_results = np.delete(chi_results, idx)
-                # 更新chi
-                chi_results[idx] = cal_chi2(freq[idx:idx + 2])
-            elif idx == len(chi_results):
-                tmp = freq[idx - 1] + freq[idx]
-                freq[idx - 1] = tmp
-                # 删除idx
-                freq = np.delete(freq, idx, 0)
-                # 删除对应的切分点
-                cutoffs = np.delete(cutoffs, idx - 1)
-                # 删除对应chi值
-                chi_results = np.delete(chi_results, idx - 1)
-                # 更新chi
-                chi_results[idx - 2] = cal_chi2(freq[idx - 2:])
-            else:
-                if chi_results[idx - 1] > chi_results[idx]:
+        if self.is_psi == 0:
+            # 分箱中只存在好或坏客户的箱体, 合并相邻卡方值小的区间
+            while np.where(freq == 0)[0].size > 0:
+                idx = np.where(freq == 0)[0][0]
+                if idx == 0:
                     tmp = freq[idx] + freq[idx + 1]
                     freq[idx + 1] = tmp
                     # 删除idx
@@ -113,12 +93,8 @@ class ChiMergeBinner(BinnerMixin):
                     # 删除对应chi值
                     chi_results = np.delete(chi_results, idx)
                     # 更新chi
-                    if idx == cutoffs.size - 1:
-                        chi_results[idx - 1] = cal_chi2(freq[idx - 1:])
-                    else:
-                        chi_results[idx] = cal_chi2(freq[idx:idx + 2])
-                        chi_results[idx - 1] = cal_chi2(freq[idx - 1:idx + 1])
-                else:
+                    chi_results[idx] = cal_chi2(freq[idx:idx + 2])
+                elif idx == len(chi_results):
                     tmp = freq[idx - 1] + freq[idx]
                     freq[idx - 1] = tmp
                     # 删除idx
@@ -126,23 +102,50 @@ class ChiMergeBinner(BinnerMixin):
                     # 删除对应的切分点
                     cutoffs = np.delete(cutoffs, idx - 1)
                     # 删除对应chi值
-                    chi_results = np.delete(chi_results, idx)
+                    chi_results = np.delete(chi_results, idx - 1)
                     # 更新chi
-                    if idx == 1:
-                        chi_results[idx - 1] = cal_chi2(freq[idx - 1:idx + 1])
+                    chi_results[idx - 2] = cal_chi2(freq[idx - 2:])
+                else:
+                    if chi_results[idx - 1] > chi_results[idx]:
+                        tmp = freq[idx] + freq[idx + 1]
+                        freq[idx + 1] = tmp
+                        # 删除idx
+                        freq = np.delete(freq, idx, 0)
+                        # 删除对应的切分点
+                        cutoffs = np.delete(cutoffs, idx)
+                        # 删除对应chi值
+                        chi_results = np.delete(chi_results, idx)
+                        # 更新chi
+                        if idx == cutoffs.size - 1:
+                            chi_results[idx - 1] = cal_chi2(freq[idx - 1:])
+                        else:
+                            chi_results[idx] = cal_chi2(freq[idx:idx + 2])
+                            chi_results[idx - 1] = cal_chi2(freq[idx - 1:idx + 1])
                     else:
-                        chi_results[idx - 2] = cal_chi2(freq[idx - 2:idx])
-                        chi_results[idx - 1] = cal_chi2(freq[idx - 1:idx + 1])
+                        tmp = freq[idx - 1] + freq[idx]
+                        freq[idx - 1] = tmp
+                        # 删除idx
+                        freq = np.delete(freq, idx, 0)
+                        # 删除对应的切分点
+                        cutoffs = np.delete(cutoffs, idx - 1)
+                        # 删除对应chi值
+                        chi_results = np.delete(chi_results, idx)
+                        # 更新chi
+                        if idx == 1:
+                            chi_results[idx - 1] = cal_chi2(freq[idx - 1:idx + 1])
+                        else:
+                            chi_results[idx - 2] = cal_chi2(freq[idx - 2:idx])
+                            chi_results[idx - 1] = cal_chi2(freq[idx - 1:idx + 1])
+
+            # # 分箱中客户数量小于阈值的箱体, 向前合并
+            # x_cut = pd.cut(x, threshold, include_lowest=True, labels=False)
+            # index = np.where(x_cut.value_counts(sort=False) < params['min_samples_leaf'])[0]
+            # if index.size > 0:
+            #     threshold = [threshold[i] for i in range(len(threshold)) if i not in index]
 
         threshold = [-inf]
         threshold.extend(cutoffs[:-1].tolist())
         threshold.append(inf)
-
-        # # 分箱中客户数量小于阈值的箱体, 向前合并
-        # x_cut = pd.cut(x, threshold, include_lowest=True, labels=False)
-        # index = np.where(x_cut.value_counts(sort=False) < params['min_samples_leaf'])[0]
-        # if index.size > 0:
-        #     threshold = [threshold[i] for i in range(len(threshold)) if i not in index]
 
         return threshold
 
