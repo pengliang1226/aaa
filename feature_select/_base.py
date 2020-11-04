@@ -45,7 +45,7 @@ def nan_filter(df: DataFrame, col_list: List, threshold: float = 0.75, null_flag
         else:
             null_rate = col_data.isna() / col_data.shape[0]
 
-        if null_rate < threshold:
+        if null_rate <= threshold:
             res.append(col)
     return res
 
@@ -69,7 +69,7 @@ def mode_filter(df: DataFrame, col_list: List, threshold: float = 0.9, null_flag
             col_data = col_data[~col_data.isna()]
 
         mode_rate = col_data.value_counts().iloc[0] / col_data.shape[0]
-        if mode_rate < threshold:
+        if mode_rate <= threshold:
             res.append(col)
     return res
 
@@ -93,7 +93,7 @@ def unique_filter(df: DataFrame, col_list: List, threshold: float = 0.9, null_fl
             col_data = col_data[~col_data.isna()]
 
         unique_rate = col_data.unique().size / col_data.shape[0]
-        if unique_rate < threshold:
+        if unique_rate <= threshold:
             res.append(col)
     return res
 

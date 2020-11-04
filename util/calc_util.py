@@ -190,9 +190,14 @@ def disorder_mapping(X: Series, y: Series, bad_y: Any = 1, null_value: List = No
     :param flag: 是否考虑缺失值
     :return:
     """
-    mask = X.isin(null_value)
-    X = X[~mask]
-    y = y[~mask]
+    if flag == 1:
+        mask = (X.isin(null_value) | X.isna())
+        X = X[~mask]
+        y = y[~mask]
+    else:
+        mask = X.isna()
+        X = X[~mask]
+        y = y[~mask]
     B = (y == bad_y).sum()
     G = y.size - B
     unique_value = X.unique()
