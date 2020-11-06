@@ -9,8 +9,8 @@ from typing import List, Union, Any
 
 import numpy as np
 from pandas import DataFrame, Series
-from sklearn.linear_model import Lasso, LassoCV
 from sklearn.feature_selection import SelectFromModel
+from sklearn.linear_model import Lasso, LassoCV
 
 
 def Lasso_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] = None, alpha: float = 1.0) -> List:
@@ -100,6 +100,3 @@ def model_filter(df: DataFrame, y: Series, col_list: List, estimator: Any, k: Un
     res = np.array(col_list)[mask].tolist()
 
     return res
-
-
-

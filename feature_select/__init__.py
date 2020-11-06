@@ -5,6 +5,7 @@
 @file: __init__.py.py
 @desc: 特征选择
 """
+from feature_select.EmbeddedMethod import Lasso_filter, LassoCV_filter, model_filter
 from feature_select.FilterMethod import variance_filter, corrY_filter, Chi2_filter, MI_filter, fclassif_filter
 from feature_select.WrapperMethod import RFE_filter, RFECV_filter
 from feature_select._base import dtype_filter, nan_filter, mode_filter, unique_filter, PSI_filter, correlation_filter, \
@@ -32,4 +33,8 @@ __all__ = [
     # 包装法
     'RFE_filter',  # 递归特征消除
     'RFECV_filter',  # 递归特征消除（交叉验证）
+    # 嵌入法
+    'Lasso_filter',  #
+    'LassoCV_filter',  #
+    'model_filter',  # 线性或树模型筛选
 ]
