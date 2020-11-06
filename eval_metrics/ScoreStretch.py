@@ -82,13 +82,14 @@ class ScoreStretch:
         pred[pred == 0] = 0.0001
 
         # 计算基础分翻倍分
-        if (self.A is None and self.B is not None) or (self.A is not None and self.B is None):
-            raise Exception('基础分, 翻倍分存在空值')
         if self.A is None and self.B is None:
             self.get_A_B(pred)
+
+        if self.A is None or self.B is None:
+            raise Exception('基础分, 翻倍分存在空值')
         # 概率转换为得分
         if self.W is None:
-            score = self.A - self.B * np.log(pred / (1 - pred))
+            score = self.A - self.B * np.log((pred / (1 - pred)) / (self.S / (1 - self.S)))
         else:
             score = self.A - self.B * np.log((pred / (1 - pred)) / (self.W / (1 - self.W)))
         # 分数限制范围
