@@ -6,15 +6,15 @@
 @desc: 
 """
 import re
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
 from eval_metrics import ScoreStretch, calc_ks, calc_auc
 from feature_binning import DecisionTreeBinner, QuantileBinner
-from feature_select import nan_filter, unique_filter, mode_filter, PSI_filter, correlation_filter, vif_filter, logit_pvalue_forward_filter, \
-    coef_forward_filter
-from util import get_attr_by_unique, disorder_mapping, woe_transform
+from feature_select import *
+from util import *
 
 if __name__ == '__main__':
     # 读取数据
@@ -38,9 +38,10 @@ if __name__ == '__main__':
     test_data = ori_data[ori_data['user_date'].str.contains('2018-08')].copy()
 
     # 根据缺失率，同值占比，唯一值占比进行筛选
-    tmp = nan_filter(ori_data.iloc[:, 2:], null_flag=null_flag)
-    tmp = mode_filter(ori_data.loc[:, tmp], null_flag=null_flag)
-    first_feats = unique_filter(ori_data.loc[:, tmp], null_flag=null_flag)
+    tmp = dtype_filter(train_data, list(train_data.columns[2:]))
+    tmp = nan_filter(train_data, tmp, null_flag=null_flag)
+    tmp = mode_filter(train_data, tmp, null_flag=null_flag)
+    first_feats = unique_filter(train_data, tmp, null_flag=null_flag)
 
     # 获取变量属性类型
     features_type = {}
