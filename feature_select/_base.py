@@ -10,7 +10,9 @@ from typing import List, Dict
 import numpy as np
 import statsmodels.api as sm
 from pandas import DataFrame, Series
+from scipy.stats import spearmanr
 from sklearn.linear_model import LogisticRegression
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
 def dtype_filter(df: DataFrame, col_list: List) -> List:
@@ -152,6 +154,69 @@ def PSI_filter(df1: DataFrame, df2: DataFrame, bins_info: Dict, feature_type: Di
             res[col] = psi
 
     return res
+
+
+def correlation_filter(df: DataFrame, col_list: List, threshold: float = 0.65, method='pearson') -> List:
+    """
+    变量间相关性变量筛选, 默认选用Pearson
+    [注]:数据不能存在空值;
+        pearson相关系数对异常值比较敏感，只对线性关系敏感，如果关系是非线性的，即便两个变量具有一一对应的关系，Pearson相关性也可能会接近0;
+        两个定序测量数据（顺序变量）之间也用spearman相关系数，不能用pearson相关系数;
+    :param df: 数据
+    :param col_list: 变量列表，按iv值从大到小排序
+    :param threshold: 相关系数阈值
+    :param method: 计算相关系数方法
+    :return:
+    """
+    if df[col_list].isna().any():
+        raise Exception('变量数据存在空值')
+
+    data_array = np.array(df[col_list])
+    if method == 'pearson':
+        corr_result = np.fabs(np.corrcoef(data_array.T))
+    elif method == 'spearman':
+        corr_result = np.fabs(spearmanr(data_array)[0])
+    else:
+        raise Exception('未知的相关系数计算方式')
+
+    idx = []
+    res = []
+    for i, col in enumerate(col_list):
+        if i == 0:
+            idx.append(i)
+            res.append(col)
+        else:
+            corr = corr_result[i, idx]
+            if (corr < threshold).all():
+                idx.append(i)
+                res.append(col)
+
+    return res
+
+
+def vif_filter(df: DataFrame, col_list: List, threshold=10) -> List:
+    """
+    多重共线性筛选，逐步剔除vif大于阈值的变量，直至所有变量的vif值小于阈值
+    :param df: 数据
+    :param col_list: 变量列表，按iv值从大到小排序
+    :param threshold: vif阈值，大于该值表示存在多重共线性
+    :return:
+    """
+    if df[col_list].isna().any():
+        raise Exception('变量数据存在空值')
+
+    vif_array = np.array(df[col_list])
+    vifs_list = [variance_inflation_factor(vif_array, i) for i in range(vif_array.shape[1])]
+    vif_high = [k for k, v in zip(col_list, vifs_list) if v >= threshold]
+    if len(vif_high) > 0:
+        for col in reversed(vif_high):
+            col_list.remove(col)
+            vif_array = np.array(df[col_list])
+            vifs_list = [variance_inflation_factor(vif_array, i) for i in range(vif_array.shape[1])]
+            if (np.array(vifs_list) < threshold).all():
+                break
+
+    return col_list
 
 
 def logit_pvalue_forward_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.05) -> List:
