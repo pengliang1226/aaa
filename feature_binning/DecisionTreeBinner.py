@@ -141,6 +141,5 @@ class DecisionTreeBinner(BinnerMixin):
         for col in df.columns:
             feat_type = self.features_info.get(col)
             nan_value = self.features_nan_value.get(col)
-            assert nan_value is not None, '变量{}缺失值标识符为空'.format(col)
             bins, flag = self._bin_threshold(df[col], y, is_num=feat_type, nan_value=nan_value, **params)
             self.features_bins[col] = {'bins': bins, 'flag': flag}

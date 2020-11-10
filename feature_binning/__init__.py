@@ -9,7 +9,7 @@ from feature_binning.ChiMergeBinner import ChiMergeBinner
 from feature_binning.DecisionTreeBinner import DecisionTreeBinner
 from feature_binning.QuantileBinner import QuantileBinner
 
-# TODO y标签数据必须为0,1; 变量必须含有缺失值标识符, 若无可用-999替代; 分箱区间默认左开右闭
+# TODO y标签数据必须为0,1; 变量若存在缺失值必须填充为缺失值标识符; 分箱区间默认左开右闭
 __all__ = [
     'DecisionTreeBinner',  # 决策树分箱
     'ChiMergeBinner',  # 卡方分箱

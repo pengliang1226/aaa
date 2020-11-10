@@ -31,8 +31,7 @@ class BinnerMixin:
         self.max_leaf_nodes = max_leaf_nodes
         self.min_samples_leaf = min_samples_leaf
         self.features_info = features_info
-        assert features_nan_value is not None, '变量缺失值标识符字典为空'
-        self.features_nan_value = features_nan_value
+        self.features_nan_value = features_nan_value if features_nan_value is not None else {}
 
         self.features_bins = {}  # 每个变量对应分箱结果
         self.features_woes = {}  # 每个变量各个分箱woe值
@@ -60,7 +59,7 @@ class BinnerMixin:
         """
         # 判断缺失值数目，如果占比超过min_samples_leaf默认5%, 缺失值单独做为一箱
         flag = 0  # 标识缺失值是否单独做为一箱
-        miss_value_num = X.isin(nan_value).sum()
+        miss_value_num = X.isin(nan_value).sum() if nan_value is not None else 0
         if miss_value_num > params['min_samples_leaf']:
             params['max_leaf_nodes'] -= 1
             y = y[~X.isin(nan_value)]
