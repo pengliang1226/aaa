@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
     # 根据缺失率，同值占比，唯一值占比进行筛选
     tmp = dtype_filter(train_data, list(train_data.columns[2:]))
-    tmp = nan_filter(train_data, tmp, null_flag=null_flag)
+    tmp = missing_filter(train_data, tmp, null_flag=null_flag)
     tmp = mode_filter(train_data, tmp, null_flag=null_flag)
     first_feats = unique_filter(train_data, tmp, null_flag=null_flag)
 

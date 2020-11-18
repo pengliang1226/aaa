@@ -44,7 +44,7 @@ def corrY_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.
     :param method: 计算相关系数方法
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
 
     res = []
@@ -74,7 +74,7 @@ def Chi2_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] =
     :param k: 保留特征数目或比例
     :return:
     """
-    if df[col_list].isna().any() or (df[col_list] < 0).any():
+    if df[col_list].isna().any().any() or (df[col_list] < 0).any().any():
         raise Exception('变量数据存在空值或负值')
     if k >= 1 and isinstance(k, float):
         raise Exception('参数keep大于等于1时, 请输入整数')
@@ -101,7 +101,7 @@ def MI_filter(df: DataFrame, y: Series, col_list: List, keep: Union[int, float] 
     :param discrete_index: list离散特征在特征列表的索引
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
     if keep >= 1 and isinstance(keep, float):
         raise Exception('参数keep大于等于1时, 请输入整数')
@@ -127,7 +127,7 @@ def fclassif_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, floa
     :param k: 保留特征数目或比例
     :return:
     """
-    if df[col_list].isna().any() or (df[col_list] < 0).any():
+    if df[col_list].isna().any().any() or (df[col_list] < 0).any().any():
         raise Exception('变量数据存在空值或负值')
     if k >= 1 and isinstance(k, float):
         raise Exception('参数keep大于等于1时, 请输入整数')

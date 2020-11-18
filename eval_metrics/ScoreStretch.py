@@ -57,27 +57,15 @@ class ScoreStretch:
         else:
             self.A = self.score_min + self.B * np.log(odds_max / (self.W / (1 - self.W)))
 
-    def predict(self, X: DataFrame, model=None) -> ndarray:
-        """
-        预测函数
-        :param X: 预测样本
-        :param model: 模型
-        :return:
-        """
-        assert model is not None, '模型文件为空'
-        model_pred = model.predict_proba(X)[:, 1]
-
-        # 预测概率还权
-        if self.W is not None:
-            model_pred = 1 / (1 + ((self.S / (1 - self.S)) / (self.W / (1 - self.W))) * (1 / model_pred - 1))
-
-        return model_pred
-
     def transform(self, pred: ndarray) -> ndarray:
         """
         预测概率根据实际业务进行还权，并转换为评分
         :return:
         """
+        # 预测概率还权
+        if self.W is not None:
+            pred = 1 / (1 + ((self.S / (1 - self.S)) / (self.W / (1 - self.W))) * (1 / pred - 1))
+
         pred[pred == 1] = 0.9999
         pred[pred == 0] = 0.0001
 
@@ -102,7 +90,4 @@ class ScoreStretch:
 
         return score
 
-    def predict_transform(self, X: DataFrame, model=None) -> ndarray:
-        pred = self.predict(X, model)
-        score = self.transform(pred)
-        return score
+    # def get_scorecard(self, estimator, bins_info):

@@ -24,7 +24,7 @@ def Lasso_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] 
     :param alpha:
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
     if k >= 1 and isinstance(k, float):
         raise Exception('参数keep大于等于1时, 请输入整数')
@@ -53,7 +53,7 @@ def LassoCV_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float
     :param alphas: 交叉验证是需要的alpha列表
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
     if k >= 1 and isinstance(k, float):
         raise Exception('参数keep大于等于1时, 请输入整数')
@@ -84,7 +84,7 @@ def model_filter(df: DataFrame, y: Series, col_list: List, estimator: Any, k: Un
     :param k: 保留特征数目或比例, 当取值为None时, 默认取系数不为0的变量
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
     if k >= 1 and isinstance(k, float):
         raise Exception('参数keep大于等于1时, 请输入整数')

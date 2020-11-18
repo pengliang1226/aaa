@@ -2,7 +2,7 @@
 """
 @author: pengliang.zhao
 @time: 2020/10/16 11:46
-@file: _base.py
+@file: BasicMethod.py
 @desc: 基础性筛选方法、评分卡独有的方法等
 """
 from typing import List, Dict
@@ -29,7 +29,7 @@ def dtype_filter(df: DataFrame, col_list: List) -> List:
     return res
 
 
-def nan_filter(df: DataFrame, col_list: List, threshold: float = 0.75, null_flag: Dict = None) -> List:
+def missing_filter(df: DataFrame, col_list: List, threshold: float = 0.75, null_flag: Dict = None) -> List:
     """
     缺失率筛选
     :param df:
@@ -49,6 +49,36 @@ def nan_filter(df: DataFrame, col_list: List, threshold: float = 0.75, null_flag
 
         if null_rate <= threshold:
             res.append(col)
+    return res
+
+
+def missingByMonth_filter(df: DataFrame, month: Series, col_list: List, threshold: float = 0.15,
+                          null_flag: Dict = None) -> List:
+    """
+    缺失率按月筛选，按月计算变量缺失率，并计算相关指标查看波动情况，进行变量筛选
+    [注]: 样本数据最好是连续月份，并且每月数据量不能差别过大
+    :param df:
+    :param month: 时间列, 只包含年月或者包含月份
+    :param col_list: 变量列表
+    :param threshold: 变异系数阈值，std/mean
+    :param null_flag: 缺失值标识符
+    :return:
+    """
+    data = df[col_list].copy()
+    if null_flag is not None:
+        for col in col_list:
+            null_value = null_flag.get(col)
+            if null_value is not None:
+                data[col].replace(null_value, [np.nan] * len(null_value), inplace=True)
+
+    data.loc[:, 'month'] = month
+    group = data.groupby('month').apply(lambda x: x.isna().sum()).T.iloc[:-1]
+    miss_num = group.apply(lambda x: x.sum(), axis=1)
+    mean = group.apply(lambda x: x.mean(), axis=1)
+    std = group.apply(lambda x: x.std(), axis=1)
+    cv = std / mean
+    res = [col for col in col_list if cv[col] < threshold or miss_num[col] < 100]  # 缺失值较少的列直接保留
+
     return res
 
 
@@ -168,7 +198,7 @@ def correlation_filter(df: DataFrame, col_list: List, threshold: float = 0.65, m
     :param method: 计算相关系数方法
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
 
     data_array = np.array(df[col_list])
@@ -202,7 +232,7 @@ def vif_filter(df: DataFrame, col_list: List, threshold=10) -> List:
     :param threshold: vif阈值，大于该值表示存在多重共线性
     :return:
     """
-    if df[col_list].isna().any():
+    if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
 
     vif_array = np.array(df[col_list])
