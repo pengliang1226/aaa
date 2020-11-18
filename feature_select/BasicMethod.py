@@ -316,9 +316,8 @@ def coef_forward_filter(df: DataFrame, y: Series, col_list: List) -> List:
         coef_col.append(col)
         X = df.loc[:, coef_col]
         sk_lr = LogisticRegression(random_state=0).fit(X, y)
-        coef_dict = {k: v for k, v in zip(coef_col, sk_lr.coef_[0])}
-        # 当引入特征的系数为负，则将其剔除
-        if coef_dict[col] < 0:
+        # 当引入特征后，若存在变量系数为负，则将引入的特征其剔除
+        if (sk_lr.coef_[0] < 0).any():
             coef_col.remove(col)
 
     return coef_col
@@ -336,7 +335,7 @@ def coef_backward_filter(df: DataFrame, y: Series, col_list: List) -> List:
     while True:
         X = df.loc[:, col_list]
         sk_lr = LogisticRegression(random_state=0).fit(X, y)
-        if any(sk_lr.coef_[0] < 0):
+        if (sk_lr.coef_[0] < 0).any():
             idx = np.where(sk_lr.coef_[0] < 0)[0][-1]
             col_list.remove(col_list[idx])
         else:
