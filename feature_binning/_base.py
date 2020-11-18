@@ -137,21 +137,22 @@ class BinnerMixin:
         """
         raise NotImplementedError("Method or function hasn't been implemented yet.")
 
-    def fit(self, df: DataFrame, y: Series):
+    def fit(self, df: DataFrame, y: Series, col_list: List):
         """
         分箱，获取最终结果
         :param df: 所有变量数据
         :param y: 标签数据
+        :param col_list: 需要调整分箱的列
         :return:
         """
         # 判断y是否为0,1变量
         assert np.array_equal(y, y.astype(bool)), 'y取值非0,1'
         # 判断数据是否存在缺失
-        assert any(df.isna()), '数据存在空值'
+        assert ~df[col_list].isna().any().any(), '数据存在空值'
         # 获取分箱阈值
-        self._get_binning_threshold(df.copy(), y.copy())
+        self._get_binning_threshold(df[col_list].copy(), y.copy())
         # 获取分箱woe值和iv值
-        for col in df.columns:
+        for col in col_list:
             self.features_woes[col], self.features_iv[col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
 
     def binning_trim(self, df: DataFrame, y: Series, col_list: List):
