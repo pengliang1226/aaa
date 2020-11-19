@@ -7,15 +7,15 @@
 """
 from typing import Dict
 
-from pandas import DataFrame, Series
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from eval_metrics.BinaryClassifier import calc_ks
-from sklearn.model_selection import KFold
-from numpy import ndarray
 import numpy as np
+from lightgbm import LGBMClassifier
+from pandas import DataFrame, Series
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import KFold
+from xgboost import XGBClassifier
+
+from eval_metrics.BinaryClassifier import calc_ks
 
 
 class BasicTrainer:
@@ -59,6 +59,7 @@ class BasicTrainer:
         :param y:
         :return:
         """
+        self.get_estimator()
         self.estimator.fit(X, y)
 
     def fit_Kfold(self, X: DataFrame, y: Series, k: int = 5):
@@ -70,6 +71,7 @@ class BasicTrainer:
         :return:
         """
         metrics, models = [], []
+        self.get_estimator()
         estimator = self.estimator
         kf = KFold(n_splits=k, shuffle=True, random_state=123)
         kf_list = list(kf.split(X))
@@ -80,20 +82,20 @@ class BasicTrainer:
             X_test, y_test = X.iloc[test_index], y.iloc[test_index]
             if self.algorithm == 'xgb':
                 estimator.fit(X_train, y_train,
-                                   early_stopping_rounds=50,
-                                   eval_set=[(X_test, y_test)],
-                                   eval_metric='auc')
+                              early_stopping_rounds=50,
+                              eval_set=[(X_test, y_test)],
+                              eval_metric='auc')
             elif self.algorithm == 'lgb':
                 estimator.fit(X_train, y_train,
-                                   early_stopping_rounds=50,
-                                   eval_set=[(X_test, y_test)],
-                                   eval_metric='auc')
+                              early_stopping_rounds=50,
+                              eval_set=[(X_test, y_test)],
+                              eval_metric='auc')
             else:
                 estimator.fit(X_train, y_train)
             pred_train = estimator.predict_proba(X_train)[:, 1]
             pred_test = estimator.predict_proba(X_test)[:, 1]
             # 计算指标
-            ks_train, ks_test = calc_ks(y_train, pred_train), calc_ks(y_test, pred_test)
+            ks_train, ks_test = calc_ks(y_train, pred_train)[0], calc_ks(y_test, pred_test)[0]
             tmp = 1.8 * ks_test - 0.8 * abs(ks_train - ks_test)
             metrics.append(tmp)
             models.append(estimator)

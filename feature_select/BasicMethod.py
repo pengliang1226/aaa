@@ -265,9 +265,8 @@ def logit_pvalue_forward_filter(df: DataFrame, y: Series, col_list: List, thresh
         # 每引入一个特征就做一次显著性检验
         x_const = sm.add_constant(df.loc[:, pvalues_col])
         sm_lr = sm.Logit(y, x_const).fit(disp=False)
-        pvalue = sm_lr.pvalues[col]
-        # 当引入的特征P值>=0.05时，则剔除，原先满足显著性检验的则保留，不再剔除
-        if pvalue >= threshold:
+        # 当引入的特征后，存在P值>=0.05特征，则剔除引入特征
+        if (sm_lr.pvalues >= threshold).any():
             pvalues_col.remove(col)
 
     return pvalues_col
@@ -286,16 +285,14 @@ def logit_pvalue_backward_filter(df: DataFrame, y: Series, col_list: List, thres
     # 所有特征引入模型，做显著性检验
     x_const = sm.add_constant(x_c)
     sm_lr = sm.Logit(y, x_const).fit()
-    delete_count = np.where(sm_lr.pvalues >= threshold)[0].size
     # 当有P值>=0.05的特征时，执行循环
-    while delete_count > 0:
+    while (sm_lr.pvalues >= threshold).any():
         # 按IV值从小到大的顺序依次逐个剔除
         remove_col = sm_lr.pvalues.index[np.where(sm_lr.pvalues >= threshold)[0][-1]]
         del x_c[remove_col]
         # 每次剔除特征后都要重新做显著性检验，直到入模的特征P值都小于0.05
         x_const = sm.add_constant(x_c)
         sm_lr = sm.Logit(y, x_const).fit()
-        delete_count = np.where(sm_lr.pvalues >= threshold)[0].size
 
     pvalues_col = x_c.columns.tolist()
 
