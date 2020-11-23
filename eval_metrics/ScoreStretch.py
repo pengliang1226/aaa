@@ -74,7 +74,7 @@ class ScoreStretch:
             else:
                 self.A = self.score_min + self.B * np.log(odds_max / (self.W / (1 - self.W)))
         elif self.A is None or self.B is None:
-            raise Exception('A,B存在缺失值，且无法通过计算得到')
+            raise Exception('A, B存在缺失值, 且无法通过计算得到')
         else:
             pass
 
