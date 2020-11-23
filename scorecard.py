@@ -117,10 +117,21 @@ if __name__ == '__main__':
     }
     model = BasicTrainer(algorithm='lr', params=params)
     model.fit(train_x, train_y)
+    train_pred = model.estimator.predict_proba(train_x)[:, -1]
     val_pred = model.estimator.predict_proba(val_x)[:, -1]
     test_pred = model.estimator.predict_proba(test_x)[:, -1]
 
-    sc = ScoreStretch(S=ori_data['y'].sum() / ori_data.shape[0])
+    # 获取入模变量相关信息字典
+    bins_info = {}
+    for col in seven_feats:
+        bins_info[col] = {}
+        bins_info[col]['bins'] = DT.features_bins[col]['bins']
+        bins_info[col]['woes'] = DT.features_woes[col]
+        bins_info[col]['flag'] = DT.features_bins[col]['flag']
+        bins_info[col]['type'] = DT.features_info[col]
+    sc = ScoreStretch(S=ori_data['y'].sum() / ori_data.shape[0], pred=train_pred)
+    sc.transform_pred_to_score(test_pred)
+    sc.transform_data_to_score(test_x, model.estimator)
 
     val_ks = calc_ks(val_y, val_pred)
     test_ks = calc_ks(test_y, test_pred)

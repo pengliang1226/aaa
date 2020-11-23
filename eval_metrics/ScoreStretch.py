@@ -113,15 +113,25 @@ class ScoreStretch:
         :param estimator: 模型
         :return:
         """
+        data = df.copy()
         coef = estimator.coef_[0]
         intercept = estimator.intercept_[0]
         base_score = self.A - self.B * intercept
 
         for i, col in enumerate(df.columns):
-            df[col] = df[col].apply(lambda x: -self.B * coef[i] * x)
+            data[col] = data[col].apply(lambda x: -self.B * coef[i] * x)
 
-        score = np.sum(df.values, axis=1)
-        score = np.around(score + base_score, 2)
+        score = np.sum(data.values, axis=1)
+        if self.W is None:
+            score = np.around(score + base_score + self.B * np.log(self.S / (1 - self.S)), 2)
+        else:
+            score = np.around(score + base_score + self.B * np.log(self.W / (1 - self.W)), 2)
+
+        # 分数限制范围
+        if self.score_max is not None:
+            score[score > self.score_max] = self.score_max
+        if self.score_min is not None:
+            score[score < self.score_min] = self.score_min
 
         return score
 
@@ -133,7 +143,7 @@ class ScoreStretch:
         :param bins_info: 包含变量属性类型，缺失值单独分箱标志，分箱区间，对应woe值
         :return:
         """
-        coef = dict(zip(model_feats, estimator.coef_[0]))
+        coef = estimator.coef_[0]
         intercept = estimator.intercept_[0]
         base_score = self.A - self.B * intercept
 
@@ -145,7 +155,7 @@ class ScoreStretch:
             'WOE': [np.nan],
             'score': [base_score]
         }
-        for i, k in enumerate(bins_info):
+        for i, k in enumerate(model_feats):
             feat_type = bins_info[k]['type']
             feat_flag = bins_info[k]['flag']
             feat_bins = bins_info[k]['bins']
@@ -160,8 +170,14 @@ class ScoreStretch:
                     res['null_flag'].append(0)
                 res['bin'].append(feat_bins[j])
                 res['WOE'].append(feat_woes[j])
-                res['score'].append(round(-self.B * feat_woes[j] * coef[k], 4))
-
+                if self.W is None:
+                    res['score'].append(round(
+                        -self.B * feat_woes[j] * coef[i] + self.B * np.log(self.S / (1 - self.S)) / len(model_feats),
+                        4))
+                else:
+                    res['score'].append(round(
+                        -self.B * feat_woes[j] * coef[i] + self.B * np.log(self.W / (1 - self.W)) / len(model_feats),
+                        4))
         res = pd.DataFrame(res)
 
         return res
