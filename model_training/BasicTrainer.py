@@ -25,6 +25,7 @@ class BasicTrainer(TrainerMixin):
         TrainerMixin.__init__(self)
         self.algorithm = algorithm
         self.params = params
+        self.create_estimator()
 
     def create_estimator(self):
         """

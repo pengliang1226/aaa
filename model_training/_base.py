@@ -20,7 +20,7 @@ class TrainerMixin:
         创建学习器
         :return:
         """
-        raise NotImplementedError("Method or function hasn't been implemented yet.")
+        pass
 
     def fit(self, X: DataFrame, y: Series):
         """
@@ -45,4 +45,4 @@ class TrainerMixin:
         :param X:
         :return:
         """
-        return self.estimator.predict_proba(X)
+        return self.estimator.predict_proba(X)[:, 1]

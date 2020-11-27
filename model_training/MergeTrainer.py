@@ -26,6 +26,7 @@ class VotingTrainer(TrainerMixin):
         self.classifiers = classifiers
         self.voting = voting
         self.weights = weights
+        self.create_estimator()
 
     def create_estimator(self):
         self.estimator = EnsembleVoteClassifier(clfs=self.classifiers,
@@ -52,6 +53,7 @@ class StackingTrainer(TrainerMixin):
         self.meta_classifier = meta_classifier
         self.use_probas = use_probas
         self.average_probas = average_probas
+        self.create_estimator()
 
     def create_estimator(self):
         self.estimator = StackingClassifier(classifiers=self.classifiers,
@@ -77,6 +79,7 @@ class StackingCVTrainer(TrainerMixin):
         self.meta_classifier = meta_classifier
         self.use_probas = use_probas
         self.cv = cv
+        self.create_estimator()
 
     def create_estimator(self):
         self.estimator = StackingCVClassifier(classifiers=self.classifiers,
