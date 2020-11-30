@@ -204,7 +204,7 @@ class Extrapolation(TrainerMixin):
         pred_igb = self.estimator.predict_proba(X_igb)[:, 1]
 
         # 通过样本分组，并对拒绝样本使用相同分组
-        bins = pd.qcut(pred_kgb, self.k, precision=17).categories
+        _, bins = pd.qcut(pred_kgb, self.k, duplicates='drop', retbins=True)
         kgb_cut = pd.cut(pred_kgb, bins=bins)
         igb_cut = pd.cut(pred_igb, bins=bins)
         kgb_bad_rate = y_kgb.groupby(kgb_cut).apply(lambda x: x.sum() / len(x))
@@ -364,7 +364,7 @@ class IterativeReclassification(TrainerMixin):
 
             pred_igb = self.estimator.predict_proba(X_igb)[:, 1]
             # 通过样本分组，并对拒绝样本使用相同分组
-            bins = pd.qcut(pred_kgb, k, precision=17).categories
+            _, bins = pd.qcut(pred_kgb, k, duplicates='drop', retbins=True)
             kgb_cut = pd.cut(pred_kgb, bins=bins)
             igb_cut = pd.cut(pred_igb, bins=bins)
             kgb_bad_rate = y_kgb.groupby(kgb_cut).apply(lambda x: x.sum() / len(x))

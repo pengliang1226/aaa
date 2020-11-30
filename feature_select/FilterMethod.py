@@ -36,7 +36,7 @@ def corrY_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.
     相关系数筛选：线性回归和逻辑回归的时候会使用pearson相关系数，而如果是树模型则更倾向于使用spearman相关系数。
     [注]:数据不能存在空值;
         pearson相关系数对异常值比较敏感，只对线性关系敏感，如果关系是非线性的，即便两个变量具有一一对应的关系，Pearson相关性也可能会接近0;
-        两个定序测量数据（顺序变量）之间也用spearman相关系数，不能用pearson相关系数;
+        两个定序测量数据（顺序变量）之间用spearman相关系数，不能用pearson相关系数;
     :param df:
     :param y:
     :param col_list:
