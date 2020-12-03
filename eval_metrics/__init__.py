@@ -12,7 +12,7 @@ from eval_metrics.StatisticalReport import calc_score_distribution, calc_distrib
 
 __all__ = [
     # 模型转换为评分
-    'ScoreStretch',  # 概率转换为评分
+    'ScoreStretch',  # 评分卡
     # 分数分布统计
     'calc_score_distribution',  # 模型评分分布
     'calc_distribute_report',  # 模型评分整体分布情况报表
