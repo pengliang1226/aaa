@@ -31,7 +31,8 @@ def variance_filter(df: DataFrame, col_list: List, threshold: float = 0.5) -> Li
     return res
 
 
-def corrY_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.65, method: str = 'pearson') -> List:
+def corrY_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] = None,
+                 method: str = 'pearson') -> List:
     """
     相关系数筛选：线性回归和逻辑回归的时候会使用pearson相关系数，而如果是树模型则更倾向于使用spearman相关系数。
     [注]:数据不能存在空值;
@@ -40,26 +41,30 @@ def corrY_filter(df: DataFrame, y: Series, col_list: List, threshold: float = 0.
     :param df:
     :param y:
     :param col_list:
-    :param threshold: 相关系数阈值
+    :param k: 保留特征数目或比例
     :param method: 计算相关系数方法
     :return:
     """
     if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
+    if k >= 1 and isinstance(k, float):
+        raise Exception('参数keep大于等于1时, 请输入整数')
+    if isinstance(k, float):
+        k = np.ceil(len(col_list) * k)
 
-    res = []
-    if method == 'pearson':
-        for col in col_list:
-            corr, p_value = pearsonr(df[col], y)
-            if p_value < 0.05 and abs(corr) >= threshold:
-                res.append(col)
-    elif method == 'spearman':
-        for col in col_list:
-            corr, p_value = spearmanr(df[col], y, nan_policy='raise')
-            if p_value < 0.05 and abs(corr) >= threshold:
-                res.append(col)
-    else:
-        raise Exception('未知的相关系数计算方式')
+    def udf(X, y):
+        if method == 'pearson':
+            result = np.array([pearsonr(x, y) for x in X.T])
+        elif method == 'spearman':
+            result = np.array([spearmanr(x, y) for x in X.T])
+        else:
+            raise Exception('未知相关系数计算方法')
+        return np.absolute(result[:, 0]), result[:, 1]
+
+    selector = SelectKBest(udf, k=k)
+    selector.fit(df[col_list], y)
+    mask = selector.get_support()
+    res = np.array(col_list)[mask].tolist()
 
     return res
 
@@ -89,7 +94,7 @@ def Chi2_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] =
     return res
 
 
-def MI_filter(df: DataFrame, y: Series, col_list: List, keep: Union[int, float] = None,
+def MI_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] = None,
               discrete_index: List = None) -> List:
     """
     互信息(Mutual information)筛选
@@ -97,22 +102,22 @@ def MI_filter(df: DataFrame, y: Series, col_list: List, keep: Union[int, float] 
     :param df:
     :param y:
     :param col_list:
-    :param keep: 保留特征数目或比例
+    :param k: 保留特征数目或比例
     :param discrete_index: list离散特征在特征列表的索引
     :return:
     """
     if df[col_list].isna().any().any():
         raise Exception('变量数据存在空值')
-    if keep >= 1 and isinstance(keep, float):
+    if k >= 1 and isinstance(k, float):
         raise Exception('参数keep大于等于1时, 请输入整数')
-    if isinstance(keep, float):
-        keep = np.ceil(len(col_list) * keep)
+    if isinstance(k, float):
+        k = np.ceil(len(col_list) * k)
 
     mi_value = mutual_info_classif(df[col_list], y,
                                    discrete_features='auto' if discrete_index is None else discrete_index,
                                    random_state=123)
     idx = np.argsort(-mi_value)
-    res = np.array(col_list)[idx[:keep]].tolist()
+    res = np.array(col_list)[idx[:k]].tolist()
 
     return res
 
