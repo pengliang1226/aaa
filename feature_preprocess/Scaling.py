@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 from pandas import DataFrame
-from sklearn.preprocessing import RobustScaler, MaxAbsScaler, MinMaxScaler, StandardScaler, Normalizer
+from sklearn.preprocessing import RobustScaler, MaxAbsScaler, MinMaxScaler, StandardScaler, Normalizer, PowerTransformer
 from sklearn.base import TransformerMixin
 
 
@@ -20,43 +20,51 @@ class FeatureScaling(TransformerMixin):
         """
         self.scaler = None
 
-    def Normalizer_normalization(self, norm: str = 'l1'):
+    def Normalizer_Scaler(self, norm: str = 'l1'):
         """
-        基础归一化
+        正则化缩放，正则化为行操作，它试图“缩放”每个样本，使其具有单位范数。由于正则化在每一行都独立起作用，它会扭曲特征之间的关系，因此较为不常见
         :param norm: 取值 l1, l2, max
         :return:
         """
         self.scaler = Normalizer(norm=norm)
 
-    def MinMax_normalization(self, feature_range: Any = (0, 1)):
+    def MinMax_Scaler(self, feature_range: Any = (0, 1)):
         """
-        归一化, 有离群值时采用robust方法
+        最大最小缩放, 有离群值时采用robust方法
         :param feature_range: 缩放区间
         :return:
         """
         self.scaler = MinMaxScaler(feature_range=feature_range)
 
-    def MaxAbs_normalization(self):
+    def MaxAbs_Scaler(self):
         """
-        归一化, 有离群值时采用robust方法
+        最大缩放, 有离群值时采用robust方法
         :return:
         """
         self.scaler = MaxAbsScaler()
 
-    def Standard_standardization(self):
+    def Standard_Scaler(self):
         """
-        z-score标准化, 有离群值时采用robust方法
+        标准缩放（z-score标准化）, 有离群值时采用robust方法
         :return:
         """
         self.scaler = StandardScaler()
 
-    def Robust_standardization(self, quantile_range: Any = (25.0, 75.0)):
+    def Robust_Scaler(self, quantile_range: Any = (25.0, 75.0)):
         """
-        Robust(鲁棒性)标准化
+        稳健缩放，可以抗异常值
         :param quantile_range: 分位数
         :return:
         """
         self.scaler = RobustScaler(quantile_range=quantile_range)
+
+    def Power_Transform(self, method: str = 'box-cox'):
+        """
+        幂次变换，将原始分布转换为正态分布
+        :param method: box-cox，变换只适用于正数；yeo-johnson，变换适用于正数和负数
+        :return:
+        """
+        self.scaler = PowerTransformer(method=method, standardize=True)
 
     def fit(self, X: DataFrame):
         """
