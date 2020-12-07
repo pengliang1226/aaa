@@ -3,7 +3,7 @@
 @author: pengliang.zhao
 @time: 2020/11/25 10:20
 @file: MergeTrainer.py
-@desc: 模型融合训练，原理可以参考https://zhuanlan.zhihu.com/p/61705517
+@desc: 模型融合训练，原理可以参考 https://zhuanlan.zhihu.com/p/61705517
 """
 from typing import List
 
