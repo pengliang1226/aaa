@@ -125,7 +125,7 @@ def MI_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] = N
 def fclassif_filter(df: DataFrame, y: Series, col_list: List, k: Union[int, float] = None) -> List:
     """
     ANOVA方差分析筛选
-    [注]:数据不能存在空值
+    [注]:数据不能存在空值，F检验在数据服从正态分布时效果会非常稳定，因此如果使用F检验过滤，我们会先将数据转换成服从正态分布的方式
     :param df:
     :param y:
     :param col_list:
