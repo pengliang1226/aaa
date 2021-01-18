@@ -76,8 +76,8 @@ def DTBinning(X, y, max_leaf_nodes=5, min_samples_leaf=0.05):
     cutoffs = cutoffs[1:]
     freq_tab = pd.crosstab(x_cut, y)
     freq = freq_tab.values
-    print(y.unique())
     value_counts = freq[:, 1] / freq[:, 0]
+
     while np.where(freq == 0)[0].size > 0:
         idx = np.where(freq == 0)[0][0]
         if idx == 0:
@@ -143,7 +143,6 @@ def calc_iv(data, flag_y='y', null_value=None, max_leaf_nodes=5, min_samples_lea
     iv_map = {}
 
     for col in data.columns:
-        print(col)
         b_bins = []
         g_bins = []
         flag = 0  # 标识缺失值是否单独做为一箱
@@ -200,5 +199,10 @@ def calc_iv(data, flag_y='y', null_value=None, max_leaf_nodes=5, min_samples_lea
 
 if __name__ == '__main__':
     data = pd.read_csv('test.csv')
+    flag_y = 'CLASS'  # 修改为样本中y标签列的列名
+    bad_y = 'Y'  # y标签列中坏样本对应的值
+    null_value = [-999]  # 修改为数据中的缺失值标识符，可以多个用逗号隔开
 
-    res = calc_iv(data.copy(), flag_y='y', null_value=[-999])
+    if bad_y != 1:
+        data[flag_y] = data[flag_y].apply(lambda x: 1 if x == bad_y else 0)
+    res = calc_iv(data.copy(), flag_y=flag_y, null_value=null_value)
