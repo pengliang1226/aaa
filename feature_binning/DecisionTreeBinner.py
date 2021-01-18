@@ -137,7 +137,7 @@ class DecisionTreeBinner(BinnerMixin):
             "max_leaf_nodes": self.max_leaf_nodes,
             "random_state": self.random_state
         }
-        self.B_G_rate = y.sum() / y.size
+        self.B_G_rate = y.sum() / (y.size - y.sum())
         for col in df.columns:
             feat_type = self.features_info.get(col)
             nan_value = self.features_nan_value.get(col)
