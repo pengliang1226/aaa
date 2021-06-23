@@ -36,6 +36,8 @@ class BinnerMixin:
         self.features_bins = {}  # 每个变量对应分箱结果
         self.features_woes = {}  # 每个变量各个分箱woe值
         self.features_iv = {}  # 每个变量iv值
+        self.featrues_bads = {}  # 每个变量各个分箱坏样本量
+        self.features_counts = {}  # 每个变量各个分箱样本量
 
     def _bin_method(self, X: Series, y: Series, **params):
         """
@@ -61,7 +63,6 @@ class BinnerMixin:
         flag = 0  # 标识缺失值是否单独做为一箱
         miss_value_num = X.isin(nan_value).sum() if nan_value is not None else 0
         if miss_value_num > params['min_samples_leaf']:
-            params['max_leaf_nodes'] -= 1
             y = y[~X.isin(nan_value)]
             X = X[~X.isin(nan_value)]
             flag = 1
@@ -122,11 +123,12 @@ class BinnerMixin:
 
         b_bins = np.array(b_bins)
         g_bins = np.array(g_bins)
+        count_bins = b_bins + g_bins
         woes = woe_single_all(B, G, b_bins, g_bins).tolist()
         temp = (b_bins + __SMOOTH__) / (B + __SMOOTH__) - (g_bins + __SMOOTH__) / (G + __SMOOTH__)
         iv = float(np.around((temp * woes).sum(), 6))
 
-        return woes, iv
+        return woes, iv, b_bins, count_bins
 
     def _get_binning_threshold(self, df: DataFrame, y: Series):
         """
@@ -153,7 +155,8 @@ class BinnerMixin:
         self._get_binning_threshold(df[col_list].copy(), y.copy())
         # 获取分箱woe值和iv值
         for col in col_list:
-            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
+            self.features_woes[col], self.features_iv[col], self.featrues_bads[col], self.features_counts[
+                col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
 
     def binning_trim(self, df: DataFrame, y: Series, col_list: List):
         """

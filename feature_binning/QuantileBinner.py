@@ -39,12 +39,9 @@ class QuantileBinner(BinnerMixin):
         :return: 等频分箱区间
         """
         # 初步分箱
-        if X.unique().size <= params['max_leaf_nodes']:  # 如果变量唯一值个数小于分箱数, 则直接按唯一值作为阈值
-            cutoffs = [-inf]
-            cutoffs.extend(np.sort(X.unique()))
-            cutoffs = np.array(cutoffs)
-        else:
-            _, cutoffs = pd.qcut(X, params['max_leaf_nodes'], duplicates='drop', retbins=True)
+        if params['max_leaf_nodes'] is None:
+            raise Exception('等频分箱个数不能为空')
+        _, cutoffs = pd.qcut(X, params['max_leaf_nodes'], duplicates='drop', retbins=True)
 
         if self.is_psi == 0:
             # 分箱中只存在好或坏客户的箱体, 与相邻区间样本数目少的合并
@@ -78,6 +75,8 @@ class QuantileBinner(BinnerMixin):
             # index = np.where(x_cut.value_counts(sort=False) < params['min_samples_leaf'])[0]
             # if index.size > 0:
             #     threshold = [threshold[i] for i in range(len(threshold)) if i not in index]
+        else:
+            cutoffs = cutoffs[1:]
 
         threshold = [-inf]
         threshold.extend(cutoffs[:-1].tolist())

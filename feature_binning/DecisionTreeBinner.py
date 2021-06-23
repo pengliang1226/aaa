@@ -53,17 +53,12 @@ class DecisionTreeBinner(BinnerMixin):
         :return: 决策树分箱区间
         """
         # 初步分箱
-        if X.unique().size <= params['max_leaf_nodes']:  # 如果变量唯一值个数小于分箱数, 则直接按唯一值作为阈值
-            cutoffs = [-inf]
-            cutoffs.extend(np.sort(X.unique()))
-            cutoffs = np.array(cutoffs)
-        else:
-            tree = DecisionTreeClassifier(**params)
-            tree.fit(X.values.reshape(-1, 1), y)
-            cutoffs = [-inf]
-            cutoffs.extend(np.sort(tree.tree_.threshold[tree.tree_.feature != -2]))
-            cutoffs.append(inf)
-            cutoffs = np.array(cutoffs)
+        tree = DecisionTreeClassifier(**params)
+        tree.fit(X.values.reshape(-1, 1), y)
+        cutoffs = [-inf]
+        cutoffs.extend(np.sort(tree.tree_.threshold[tree.tree_.feature != -2]))
+        cutoffs.append(inf)
+        cutoffs = np.array(cutoffs)
 
         if self.is_psi == 0:
             # 分箱中只存在好或坏客户的箱体
@@ -115,6 +110,8 @@ class DecisionTreeBinner(BinnerMixin):
                 freq = np.delete(freq, idx, 0)
                 # 更新value_counts
                 value_counts = freq[:, 1] / freq[:, 0]
+        else:
+            cutoffs = cutoffs[1:]
 
         threshold = [-inf]
         threshold.extend(cutoffs[:-1].tolist())

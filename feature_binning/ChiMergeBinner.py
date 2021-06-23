@@ -56,7 +56,8 @@ class ChiMergeBinner(BinnerMixin):
         chi_results = np.array(chi_results)
 
         # 如果变量唯一值个数大于分箱数, 进行合并; 如果小于跳过合并
-        while cutoffs.size > params['max_leaf_nodes']:
+        max_leaf_nodes = params['max_leaf_nodes'] if params['max_leaf_nodes'] is not None else 0
+        while cutoffs.size > max_leaf_nodes:
             minidx = np.argmin(chi_results)
             minvalue = np.min(chi_results)
             # 如果最小卡方值小于阈值或箱体数大于最大箱体数，则合并最小卡方值的相邻两组，并继续循环
