@@ -273,7 +273,7 @@ def bins_to_df(bins_map: Dict) -> DataFrame:
         res['count'].extend(value['counts'])
         res['rate'].extend(value['bads'] / value['counts'])
         res['woe'].extend(value['woes'])
-        res['iv'].extend(value['iv'])
+        res['iv'].extend([value['iv']] * value['bads'].size)
 
     df = pd.DataFrame(res)
     return df
