@@ -8,6 +8,7 @@
 from typing import Dict, List
 
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Series
 
 from util import woe_single_all, woe_single
@@ -34,10 +35,7 @@ class BinnerMixin:
         self.features_nan_value = features_nan_value if features_nan_value is not None else {}
 
         self.features_bins = {}  # 每个变量对应分箱结果
-        self.features_woes = {}  # 每个变量各个分箱woe值
-        self.features_iv = {}  # 每个变量iv值
-        self.featrues_bads = {}  # 每个变量各个分箱坏样本量
-        self.features_counts = {}  # 每个变量各个分箱样本量
+        self.features_df = None  # 分箱结果dataframe
 
     def _bin_method(self, X: Series, y: Series, **params):
         """
@@ -128,7 +126,10 @@ class BinnerMixin:
         temp = (b_bins + __SMOOTH__) / (B + __SMOOTH__) - (g_bins + __SMOOTH__) / (G + __SMOOTH__)
         iv = float(np.around((temp * woes).sum(), 6))
 
-        return woes, iv, b_bins, count_bins
+        self.features_bins[col_name]['counts'] = count_bins
+        self.features_bins[col_name]['bads'] = b_bins
+        self.features_bins[col_name]['woes'] = woes
+        self.features_bins[col_name]['iv'] = iv
 
     def _get_binning_threshold(self, df: DataFrame, y: Series):
         """
@@ -155,8 +156,9 @@ class BinnerMixin:
         self._get_binning_threshold(df[col_list].copy(), y.copy())
         # 获取分箱woe值和iv值
         for col in col_list:
-            self.features_woes[col], self.features_iv[col], self.featrues_bads[col], self.features_counts[
-                col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
+            self._get_woe_iv(df[col].copy(), y.copy(), col)
+
+        self.features_df = bins_to_df(self.features_bins)
 
     def binning_trim(self, df: DataFrame, y: Series, col_list: List):
         """
@@ -174,7 +176,7 @@ class BinnerMixin:
             feat_type = self.features_info[col]
             bins = self.features_bins[col]['bins']
             flag = self.features_bins[col]['flag']
-            woes = np.array(self.features_woes[col])
+            woes = np.array(self.features_bins[col]['woes'])
 
             # 剔除缺失值相关信息
             if flag == 1:
@@ -220,7 +222,9 @@ class BinnerMixin:
             else:
                 self.features_bins[col]['bins'] = bins
 
-            self.features_woes[col], self.features_iv[col] = self._get_woe_iv(df[col].copy(), y.copy(), col)
+            self._get_woe_iv(df[col].copy(), y.copy(), col)
+
+        self.features_df = bins_to_df(self.features_bins)
 
 
 def encode_woe(X: Series, y: Series) -> Dict:
@@ -253,3 +257,23 @@ def get_woe_inflexions(woes: List[float]) -> int:
     if n <= 2:
         return 0
     return sum(1 if (b - a) * (b - c) > 0 else 0 for a, b, c in zip(woes[:-2], woes[1:-1], woes[2:]))
+
+
+def bins_to_df(bins_map: Dict) -> DataFrame:
+    """
+    分箱结果转dataframe
+    :param bins_map:
+    :return:
+    """
+    res = {'col_name': [], 'bin': [], 'bad': [], 'count': [], 'rate': [], 'woe': [], 'iv': []}
+    for col, value in bins_map.items():
+        res['col_name'].extend([col] * value['bads'].size)
+        res['bin'].extend(value['bins'])
+        res['bad'].extend(value['bads'])
+        res['count'].extend(value['counts'])
+        res['rate'].extend(value['bads'] / value['counts'])
+        res['woe'].extend(value['woes'])
+        res['iv'].extend(value['iv'])
+
+    df = pd.DataFrame(res)
+    return df
