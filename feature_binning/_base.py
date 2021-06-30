@@ -3,15 +3,15 @@
 @author: pengliang.zhao
 @time: 2020/9/27 11:11
 @file: BasicMethod.py
-@desc: 
+@desc:
 """
 from typing import Dict, List
 
 import numpy as np
-import pandas as pd
 from pandas import DataFrame, Series
 
 from util import woe_single_all, woe_single
+from eval_metrics import calc_ks, calc_gini
 
 __SMOOTH__ = 1e-6
 __DEFAULT__ = 1e-6
@@ -35,7 +35,9 @@ class BinnerMixin:
         self.features_nan_value = features_nan_value if features_nan_value is not None else {}
 
         self.features_bins = {}  # 每个变量对应分箱结果
-        self.features_df = None  # 分箱结果dataframe
+        # 分箱结果dataframe
+        self.features_df = {'col_name': [], 'bin': [], 'bad': [], 'count': [], 'rate': [], 'woe': [], 'iv': [],
+                            'gini': [], 'ks': []}
 
     def _bin_method(self, X: Series, y: Series, **params):
         """
@@ -100,6 +102,9 @@ class BinnerMixin:
         b_bins = []
         g_bins = []
 
+        col_gini = calc_gini(y, X)
+        col_ks, _ = calc_ks(y, X)
+
         if nan_flag == 1:
             mask = X.isin(bins[0])
             b_bins.append(y[mask].sum())
@@ -131,6 +136,16 @@ class BinnerMixin:
         self.features_bins[col_name]['woes'] = woes
         self.features_bins[col_name]['iv'] = iv
 
+        self.features_df['col_name'].extend([col_name] * b_bins.size)
+        self.features_df['bin'].extend(bins)
+        self.features_df['bad'].extend(b_bins)
+        self.features_df['count'].extend(count_bins)
+        self.features_df['rate'].extend(b_bins / count_bins)
+        self.features_df['woe'].extend(woes)
+        self.features_df['iv'].extend([iv] * b_bins.size)
+        self.features_df['gini'].extend([col_gini] * b_bins.size)
+        self.features_df['ks'].extend([col_ks] * b_bins.size)
+
     def _get_binning_threshold(self, df: DataFrame, y: Series):
         """
         获取分箱阈值，具体函数参见分箱方法的重写函数
@@ -158,8 +173,6 @@ class BinnerMixin:
         for col in col_list:
             self._get_woe_iv(df[col].copy(), y.copy(), col)
 
-        self.features_df = bins_to_df(self.features_bins)
-
     def binning_trim(self, df: DataFrame, y: Series, col_list: List):
         """
         分箱单调性调整，并重新计算相关指标
@@ -168,6 +181,7 @@ class BinnerMixin:
         :param col_list: 需要调整分箱的列
         :return:
         """
+        self.features_df = {'col_name': [], 'bin': [], 'bad': [], 'count': [], 'rate': [], 'woe': [], 'iv': []}
         B = y.sum()
         G = y.size - B
         for col in col_list:
@@ -224,8 +238,6 @@ class BinnerMixin:
 
             self._get_woe_iv(df[col].copy(), y.copy(), col)
 
-        self.features_df = bins_to_df(self.features_bins)
-
 
 def encode_woe(X: Series, y: Series) -> Dict:
     """
@@ -257,23 +269,3 @@ def get_woe_inflexions(woes: List[float]) -> int:
     if n <= 2:
         return 0
     return sum(1 if (b - a) * (b - c) > 0 else 0 for a, b, c in zip(woes[:-2], woes[1:-1], woes[2:]))
-
-
-def bins_to_df(bins_map: Dict) -> DataFrame:
-    """
-    分箱结果转dataframe
-    :param bins_map:
-    :return:
-    """
-    res = {'col_name': [], 'bin': [], 'bad': [], 'count': [], 'rate': [], 'woe': [], 'iv': []}
-    for col, value in bins_map.items():
-        res['col_name'].extend([col] * value['bads'].size)
-        res['bin'].extend(value['bins'])
-        res['bad'].extend(value['bads'])
-        res['count'].extend(value['counts'])
-        res['rate'].extend(value['bads'] / value['counts'])
-        res['woe'].extend(value['woes'])
-        res['iv'].extend([value['iv']] * value['bads'].size)
-
-    df = pd.DataFrame(res)
-    return df
