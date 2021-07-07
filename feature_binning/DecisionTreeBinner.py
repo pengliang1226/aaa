@@ -19,7 +19,7 @@ from feature_binning._base import BinnerMixin
 class DecisionTreeBinner(BinnerMixin):
     def __init__(self, features_info: Dict = None, features_nan_value: Dict = None, max_leaf_nodes=5,
                  min_samples_leaf=0.05, criterion='gini', max_depth=None, min_samples_split=2,
-                 random_state=1234, is_psi: int = 0):
+                 random_state=1234, is_psi: int = 0, is_ks: int = 0, is_gini: int = 0):
         """
         初始化函数
         :param features_info: 变量属性类型
@@ -31,10 +31,13 @@ class DecisionTreeBinner(BinnerMixin):
         :param min_samples_split: 决策树节点分裂最少样本量
         :param random_state: 随机种子
         :param is_psi: 是否是为了计算psi进行的分箱，如果是则不需要进行分箱后的合并操作
+        :param is_ks: 是否计算ks
+        :param is_gini: 是否计算gini
         """
         # basic params
         BinnerMixin.__init__(self, features_info=features_info, features_nan_value=features_nan_value,
-                             max_leaf_nodes=max_leaf_nodes, min_samples_leaf=min_samples_leaf)
+                             max_leaf_nodes=max_leaf_nodes, min_samples_leaf=min_samples_leaf, is_ks=is_ks,
+                             is_gini=is_gini)
 
         # decision tree params
         self.criterion = criterion

@@ -21,23 +21,30 @@ __all__ = ['BinnerMixin', 'encode_woe']
 
 class BinnerMixin:
     def __init__(self, features_info: Dict = None, features_nan_value: Dict = None, max_leaf_nodes: int = 5,
-                 min_samples_leaf=0.05):
+                 min_samples_leaf=0.05, is_ks: int = 0, is_gini: int = 0):
         """
         初始化函数
         :param features_info: 变量属性类型
         :param features_nan_value: 变量缺失值标识符字典，每个变量可能对应多个缺失值标识符存储为list
         :param max_leaf_nodes: 最大分箱数量
         :param min_samples_leaf: 每个分箱最少样本比例
+        :param is_ks: 是否计算ks
+        :param is_gini: 是否计算gini
         """
         self.max_leaf_nodes = max_leaf_nodes
         self.min_samples_leaf = min_samples_leaf
         self.features_info = features_info
         self.features_nan_value = features_nan_value if features_nan_value is not None else {}
+        self.is_ks = is_ks
+        self.is_gini = is_gini
 
         self.features_bins = {}  # 每个变量对应分箱结果
         # 分箱结果dataframe
-        self.features_df = {'col_name': [], 'bin': [], 'bad': [], 'count': [], 'rate': [], 'woe': [], 'iv': [],
-                            'gini': [], 'ks': []}
+        self.features_df = {'col_name': [], 'bin': [], 'bad': [], 'count': [], 'rate': [], 'woe': [], 'iv': []}
+        if is_ks == 1:
+            self.features_df['ks'] = []
+        if is_gini == 1:
+            self.features_df['gini'] = []
 
     def _bin_method(self, X: Series, y: Series, **params):
         """
@@ -101,9 +108,13 @@ class BinnerMixin:
         G = y.size - B
         b_bins = []
         g_bins = []
+        col_ks = None
+        col_gini = None
 
-        col_gini = calc_gini(y, X)
-        col_ks, _ = calc_ks(y, X)
+        if self.is_ks == 1:
+            col_gini = calc_gini(y, X)
+        if self.is_gini == 1:
+            col_ks, _ = calc_ks(y, X)
 
         if nan_flag == 1:
             mask = X.isin(bins[0])
@@ -143,8 +154,10 @@ class BinnerMixin:
         self.features_df['rate'].extend(b_bins / count_bins)
         self.features_df['woe'].extend(woes)
         self.features_df['iv'].extend([iv] * b_bins.size)
-        self.features_df['gini'].extend([col_gini] * b_bins.size)
-        self.features_df['ks'].extend([col_ks] * b_bins.size)
+        if self.is_ks == 1:
+            self.features_df['gini'].extend([col_gini] * b_bins.size)
+        if self.is_gini == 1:
+            self.features_df['ks'].extend([col_ks] * b_bins.size)
 
     def _get_binning_threshold(self, df: DataFrame, y: Series):
         """
